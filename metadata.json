@@ -1,0 +1,12 @@
+{
+  "name": "StreamPulse AI - Studio Live & Diffusion Interactive",
+  "description": "Plateforme professionnelle de streaming en direct avec partage d'écran, filtres vidéo de clarté, micro spectateurs, modération avancée et contrôle IA en direct.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone",
+    "display-capture"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
