@@ -1,4 +1,4 @@
-import express from 'express';
+import express, { Response } from 'express';
 import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI } from '@google/genai';
 import path from 'path';
@@ -13,9 +13,42 @@ const __dirname = path.dirname(__filename);
 const isProduction = process.env.NODE_ENV === 'production';
 const PORT = Number(process.env.PORT) || 3000;
 
+// SERVER-SIDE SHARED SYNCHRONIZATION STATE (Liaison Réseau PC & Téléphone)
+interface SharedServerState {
+  users: any[];
+  streams: any[];
+  recordings: any[];
+  chat: { [streamId: string]: any[] };
+  mics: { [streamId: string]: any[] };
+  pairs: { [code: string]: any };
+}
+
+const sharedState: SharedServerState = {
+  users: [],
+  streams: [],
+  recordings: [],
+  chat: {},
+  mics: {},
+  pairs: {},
+};
+
+// SSE active subscribers (phones & PCs)
+const sseClients: Response[] = [];
+
+function broadcastSSE(type: string, data: any) {
+  const payload = `data: ${JSON.stringify({ type, data, timestamp: Date.now() })}\n\n`;
+  for (let i = sseClients.length - 1; i >= 0; i--) {
+    try {
+      sseClients[i].write(payload);
+    } catch {
+      sseClients.splice(i, 1);
+    }
+  }
+}
+
 async function bootstrap() {
   const app = express();
-  app.use(express.json({ limit: '20mb' }));
+  app.use(express.json({ limit: '25mb' }));
 
   // Initialize server-side Gemini client
   const ai = new GoogleGenAI({
@@ -27,6 +60,212 @@ async function bootstrap() {
     },
   });
 
+  // ==========================================
+  // CROSS-DEVICE REAL-TIME SYNC (PC & MOBILE)
+  // ==========================================
+
+  // SSE Stream Endpoint for instant live sync on PC & Phone
+  app.get('/api/sync/events', (req, res) => {
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.flushHeaders?.();
+
+    sseClients.push(res);
+    res.write(`data: ${JSON.stringify({ type: 'connected', clientsCount: sseClients.length })}\n\n`);
+
+    req.on('close', () => {
+      const idx = sseClients.indexOf(res);
+      if (idx !== -1) sseClients.splice(idx, 1);
+    });
+  });
+
+  // Get full server state
+  app.get('/api/sync/state', (_req, res) => {
+    res.json(sharedState);
+  });
+
+  // User Registration with server-authoritative unique email check across PC & Mobile
+  app.post('/api/sync/user', (req, res) => {
+    const { email, username, name, role, avatar, bio } = req.body;
+    if (!email || !username || !name) {
+      return res.status(400).json({ error: 'Champs requis manquants.' });
+    }
+
+    const cleanEmail = String(email).trim().toLowerCase();
+    const existingEmail = sharedState.users.find((u) => u.email.toLowerCase() === cleanEmail);
+    if (existingEmail) {
+      return res.status(400).json({
+        error: `L'adresse email "${cleanEmail}" est déjà utilisée. Chaque compte doit posséder un email unique.`,
+      });
+    }
+
+    const existingUsername = sharedState.users.find((u) => u.username.toLowerCase() === username.trim().toLowerCase());
+    if (existingUsername) {
+      return res.status(400).json({
+        error: `Le nom d'utilisateur "@${username}" est déjà pris.`,
+      });
+    }
+
+    const newUser = {
+      id: `user_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      email: cleanEmail,
+      username: username.trim(),
+      name: name.trim(),
+      avatar: avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(username)}`,
+      bio: bio || 'Membre de la communauté StreamPulse.',
+      role: role || 'creator',
+      followersCount: 0,
+      followingCount: 0,
+      createdAt: new Date().toISOString(),
+      channelBanner: 'https://images.unsplash.com/photo-1579546929518-9e396f3cc809?w=1200&auto=format&fit=crop&q=80',
+    };
+
+    sharedState.users.push(newUser);
+    broadcastSSE('users_updated', sharedState.users);
+    res.json({ success: true, user: newUser });
+  });
+
+  // User Login
+  app.post('/api/sync/login', (req, res) => {
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ error: 'Email manquant.' });
+    const cleanEmail = String(email).trim().toLowerCase();
+    const user = sharedState.users.find((u) => u.email.toLowerCase() === cleanEmail);
+    if (!user) {
+      return res.status(404).json({ error: `Aucun compte associé à l'adresse "${cleanEmail}".` });
+    }
+    if (user.isBanned) {
+      return res.status(403).json({ error: `Ce compte est suspendu par un administrateur.` });
+    }
+    res.json({ success: true, user });
+  });
+
+  // Stream Save / Update (Live broadcast state synced between PC & Phone)
+  app.post('/api/sync/stream', (req, res) => {
+    const stream = req.body;
+    if (!stream || !stream.id) return res.status(400).json({ error: 'Stream invalide.' });
+
+    const idx = sharedState.streams.findIndex((s) => s.id === stream.id);
+    if (idx !== -1) {
+      sharedState.streams[idx] = { ...sharedState.streams[idx], ...stream };
+    } else {
+      sharedState.streams.unshift(stream);
+    }
+
+    broadcastSSE('stream_updated', { stream, streams: sharedState.streams });
+    res.json({ success: true, stream: sharedState.streams.find((s) => s.id === stream.id) });
+  });
+
+  // Delete / End Stream
+  app.delete('/api/sync/stream/:id', (req, res) => {
+    const { id } = req.params;
+    sharedState.streams = sharedState.streams.filter((s) => s.id !== id);
+    broadcastSSE('stream_ended', { streamId: id, streams: sharedState.streams });
+    res.json({ success: true });
+  });
+
+  // Chat message across PC & Phone
+  app.get('/api/sync/chat/:streamId', (req, res) => {
+    const { streamId } = req.params;
+    res.json(sharedState.chat[streamId] || []);
+  });
+
+  app.post('/api/sync/chat', (req, res) => {
+    const msg = req.body;
+    if (!msg || !msg.streamId) return res.status(400).json({ error: 'Message invalide' });
+
+    if (!sharedState.chat[msg.streamId]) {
+      sharedState.chat[msg.streamId] = [];
+    }
+    sharedState.chat[msg.streamId].push(msg);
+    broadcastSSE('chat_message', msg);
+    res.json({ success: true, message: msg });
+  });
+
+  // Mic Requests (Viewer speech queue synced between host on PC and viewer on phone)
+  app.get('/api/sync/mics/:streamId', (req, res) => {
+    const { streamId } = req.params;
+    res.json(sharedState.mics[streamId] || []);
+  });
+
+  app.post('/api/sync/mic', (req, res) => {
+    const { action, streamId, micRequest, requestId, isMuted } = req.body;
+    if (!streamId) return res.status(400).json({ error: 'Stream ID manquant' });
+
+    if (!sharedState.mics[streamId]) {
+      sharedState.mics[streamId] = [];
+    }
+
+    if (action === 'request' && micRequest) {
+      const exists = sharedState.mics[streamId].find((r: any) => r.id === micRequest.id || r.userId === micRequest.userId);
+      if (!exists) {
+        sharedState.mics[streamId].push(micRequest);
+      }
+    } else if (action === 'accept' && requestId) {
+      sharedState.mics[streamId] = sharedState.mics[streamId].map((r: any) =>
+        r.id === requestId ? { ...r, status: 'accepted', isMuted: false } : r
+      );
+    } else if (action === 'decline' && requestId) {
+      sharedState.mics[streamId] = sharedState.mics[streamId].filter((r: any) => r.id !== requestId);
+    } else if (action === 'mute' && requestId) {
+      sharedState.mics[streamId] = sharedState.mics[streamId].map((r: any) =>
+        r.id === requestId ? { ...r, isMuted: typeof isMuted === 'boolean' ? isMuted : !r.isMuted } : r
+      );
+    } else if (action === 'remove' && requestId) {
+      sharedState.mics[streamId] = sharedState.mics[streamId].filter((r: any) => r.id !== requestId);
+    }
+
+    broadcastSSE('mics_updated', { streamId, mics: sharedState.mics[streamId] });
+    res.json({ success: true, mics: sharedState.mics[streamId] });
+  });
+
+  // Pairing between PC & Phone
+  app.post('/api/sync/pair', (req, res) => {
+    const { hostUserId, deviceRole, streamId } = req.body;
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    sharedState.pairs[code] = {
+      code,
+      hostUserId,
+      streamId,
+      deviceRole: deviceRole || 'remote_control',
+      createdAt: new Date().toISOString(),
+    };
+    res.json({ success: true, code, session: sharedState.pairs[code] });
+  });
+
+  app.get('/api/sync/pair/:code', (req, res) => {
+    const { code } = req.params;
+    const session = sharedState.pairs[code];
+    if (!session) return res.status(404).json({ error: 'Code de liaison invalide ou expiré.' });
+    res.json({ success: true, session });
+  });
+
+  // Save recorded video across devices
+  app.post('/api/sync/recording', (req, res) => {
+    const rec = req.body;
+    if (!rec || !rec.id) return res.status(400).json({ error: 'Enregistrement invalide' });
+    sharedState.recordings.unshift(rec);
+    broadcastSSE('recordings_updated', sharedState.recordings);
+    res.json({ success: true });
+  });
+
+  // Reset shared state
+  app.post('/api/sync/reset', (_req, res) => {
+    sharedState.users = [];
+    sharedState.streams = [];
+    sharedState.recordings = [];
+    sharedState.chat = {};
+    sharedState.mics = {};
+    sharedState.pairs = {};
+    broadcastSSE('reset', {});
+    res.json({ success: true });
+  });
+
+  // ==========================================
+  // GEMINI AI STUDIO SERVICES
+  // ==========================================
+
   // AI Moderation Endpoint
   app.post('/api/ai/moderate', async (req, res) => {
     try {
@@ -36,7 +275,6 @@ async function bootstrap() {
       }
 
       if (!process.env.GEMINI_API_KEY) {
-        // Fallback rule-based check if no API key is configured
         const badWords = ['spam', 'insulte', 'fck', 'merde', 'connard', 'conne', 'salope', 'tg', 'ftg'];
         const isToxic = badWords.some((w) => text.toLowerCase().includes(w));
         return res.json({
@@ -73,7 +311,6 @@ Réponds UNIQUEMENT sous forme JSON valide avec cette structure exacte:
       return res.json(parsed);
     } catch (err: any) {
       console.error('Erreur API /api/ai/moderate:', err);
-      // Graceful fallback to keep live chat moving
       res.json({
         isSafe: true,
         flaggedReason: null,

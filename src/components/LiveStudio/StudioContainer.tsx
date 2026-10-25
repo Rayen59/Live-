@@ -14,7 +14,8 @@ import {
   CircleDot, 
   Play, 
   Square,
-  HelpCircle
+  HelpCircle,
+  Smartphone
 } from 'lucide-react';
 import { 
   User, 
@@ -34,6 +35,7 @@ import { MicRequestsManager } from './MicRequestsManager';
 import { AICopilotPanel } from './AICopilotPanel';
 import { LiveChat } from '../Chat/LiveChat';
 import { ModerationModal } from '../Chat/ModerationModal';
+import { DevicePairingModal } from '../DevicePairingModal';
 import { StorageService } from '../../services/storage';
 
 interface StudioContainerProps {
@@ -90,6 +92,8 @@ export const StudioContainer: React.FC<StudioContainerProps> = ({
   // Media gallery & Ads
   const [mediaAssets, setMediaAssets] = useState<MediaAsset[]>(StorageService.getMediaAssets());
   const [activeMediaId, setActiveMediaId] = useState<string | undefined>(currentStream.currentMediaId);
+  const [parallelMediaId, setParallelMediaId] = useState<string | undefined>(currentStream.parallelMediaId);
+  const [isPairingModalOpen, setIsPairingModalOpen] = useState(false);
 
   // Mic Requests & On-air guest speakers
   const [micRequests, setMicRequests] = useState<MicRequest[]>([]);
@@ -134,18 +138,46 @@ export const StudioContainer: React.FC<StudioContainerProps> = ({
     onUpdateStream({ isRecording: nextState });
   };
 
-  const handleSelectMediaToBroadcast = (asset: MediaAsset) => {
+  // Broadcast media solo (takes full program output, auto-returns to live camera after countdown or on finish)
+  const handleSelectMediaSolo = (asset: MediaAsset, duration?: number) => {
     setActiveMediaId(asset.id);
-    setActiveSource(asset.type === 'video' ? 'media' : 'poster');
+    const newSource: VideoSourceType = asset.type === 'video' ? 'media' : 'poster';
+    setActiveSource(newSource);
     onUpdateStream({
-      activeSource: asset.type === 'video' ? 'media' : 'poster',
+      activeSource: newSource,
       currentMediaId: asset.id,
+      adSoloCountdown: duration || 15,
+      adAutoReturnTargetSource: 'camera',
     });
   };
 
+  // Broadcast media in parallel (Picture-in-Picture window inside the live broadcast while live camera stays active)
+  const handleSelectMediaParallel = (asset: MediaAsset) => {
+    setParallelMediaId(asset.id);
+    onUpdateStream({
+      parallelMediaId: asset.id,
+      parallelMediaMode: 'pip',
+    });
+  };
+
+  // Stop parallel media broadcast
+  const handleStopParallelMedia = () => {
+    setParallelMediaId(undefined);
+    onUpdateStream({
+      parallelMediaId: undefined,
+      parallelMediaMode: null,
+    });
+  };
+
+  // Return to live camera (from solo media or poster)
   const handleReturnToLiveCamera = () => {
     setActiveSource('camera');
-    onUpdateStream({ activeSource: 'camera' });
+    setActiveMediaId(undefined);
+    onUpdateStream({
+      activeSource: 'camera',
+      currentMediaId: undefined,
+      adSoloCountdown: undefined,
+    });
   };
 
   const handleAcceptMic = (reqId: string) => {
@@ -235,14 +267,22 @@ export const StudioContainer: React.FC<StudioContainerProps> = ({
           </div>
         </div>
 
-        {/* End Stream & Settings */}
+        {/* End Stream, Mobile Liaison & Settings */}
         <div className="flex items-center gap-2">
+          <button
+            onClick={() => setIsPairingModalOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-2 bg-gradient-to-r from-rose-600/30 to-purple-600/30 hover:from-rose-600/50 hover:to-purple-600/50 text-white text-xs font-semibold rounded-xl border border-rose-500/40 transition cursor-pointer shadow"
+          >
+            <Smartphone className="w-3.5 h-3.5 text-rose-400 animate-pulse" />
+            <span>Liaison Mobile & Télécommande</span>
+          </button>
+
           <button
             onClick={() => setIsEditingOverlays(!isEditingOverlays)}
             className="flex items-center gap-1.5 px-3 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-semibold rounded-xl border border-zinc-700 transition cursor-pointer"
           >
             <Edit3 className="w-3.5 h-3.5" />
-            <span>Modifier les Titres & Bandeaux</span>
+            <span>Titres & Bandeaux</span>
           </button>
 
           <button
@@ -323,6 +363,9 @@ export const StudioContainer: React.FC<StudioContainerProps> = ({
             activeSource={activeSource}
             filterSettings={filterSettings}
             activeMedia={activeMedia}
+            parallelMedia={mediaAssets.find((m) => m.id === parallelMediaId)}
+            onStopParallelMedia={handleStopParallelMedia}
+            onReturnToLiveCamera={handleReturnToLiveCamera}
             activeSpeakers={activeSpeakers}
             isRecording={isRecording}
             onToggleRecording={handleToggleRecording}
@@ -422,7 +465,10 @@ export const StudioContainer: React.FC<StudioContainerProps> = ({
                 mediaAssets={mediaAssets}
                 setMediaAssets={setMediaAssets}
                 activeMediaId={activeMediaId}
-                onSelectMediaToBroadcast={handleSelectMediaToBroadcast}
+                parallelMediaId={parallelMediaId}
+                onSelectMediaToBroadcastSolo={handleSelectMediaSolo}
+                onSelectMediaToBroadcastParallel={handleSelectMediaParallel}
+                onStopParallelMedia={handleStopParallelMedia}
                 activeSource={activeSource}
                 onReturnToLiveCamera={handleReturnToLiveCamera}
               />
@@ -473,6 +519,14 @@ export const StudioContainer: React.FC<StudioContainerProps> = ({
         currentUser={currentUser}
         allUsers={allUsers}
         onBanUser={handleBanUser}
+      />
+
+      {/* Real-time PC & Mobile Liaison Modal */}
+      <DevicePairingModal
+        isOpen={isPairingModalOpen}
+        onClose={() => setIsPairingModalOpen(false)}
+        currentUser={currentUser}
+        activeStream={currentStream}
       />
     </div>
   );

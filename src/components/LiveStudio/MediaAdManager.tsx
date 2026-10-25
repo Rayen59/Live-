@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { Film, Image as ImageIcon, Upload, Play, Check, AlertCircle, Clock, Volume2, ArrowLeft } from 'lucide-react';
+import { Film, Image as ImageIcon, Upload, Play, Check, AlertCircle, Clock, Volume2, ArrowLeft, Layers, PictureInPicture, Square } from 'lucide-react';
 import { MediaAsset, VideoSourceType } from '../../types';
 import { StorageService } from '../../services/storage';
 
@@ -7,18 +7,26 @@ interface MediaAdManagerProps {
   mediaAssets: MediaAsset[];
   setMediaAssets: React.Dispatch<React.SetStateAction<MediaAsset[]>>;
   activeMediaId?: string;
-  onSelectMediaToBroadcast: (asset: MediaAsset) => void;
+  parallelMediaId?: string;
+  onSelectMediaToBroadcastSolo: (asset: MediaAsset, duration?: number) => void;
+  onSelectMediaToBroadcastParallel: (asset: MediaAsset) => void;
+  onStopParallelMedia: () => void;
   activeSource: VideoSourceType;
   onReturnToLiveCamera: () => void;
+  onSelectMediaToBroadcast?: (asset: MediaAsset) => void;
 }
 
 export const MediaAdManager: React.FC<MediaAdManagerProps> = ({
   mediaAssets,
   setMediaAssets,
   activeMediaId,
-  onSelectMediaToBroadcast,
+  parallelMediaId,
+  onSelectMediaToBroadcastSolo,
+  onSelectMediaToBroadcastParallel,
+  onStopParallelMedia,
   activeSource,
   onReturnToLiveCamera,
+  onSelectMediaToBroadcast,
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [filterType, setFilterType] = useState<'all' | 'video' | 'image'>('all');
@@ -102,10 +110,10 @@ export const MediaAdManager: React.FC<MediaAdManagerProps> = ({
             <span className="w-2.5 h-2.5 rounded-full bg-rose-500 animate-ping" />
             <div>
               <p className="text-xs font-bold text-rose-200">
-                Média / Publicité actuellement en cours de diffusion sur le programme
+                Média / Publicité en Plein Écran (Retour automatique au direct à la fin)
               </p>
               <p className="text-[11px] text-rose-300/80">
-                Les spectateurs voient votre média sélectionné.
+                La vidéo s'affiche seule sur le programme. Le live reviendra automatiquement une fois terminée.
               </p>
             </div>
           </div>
@@ -114,7 +122,31 @@ export const MediaAdManager: React.FC<MediaAdManagerProps> = ({
             className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold rounded-lg shadow transition cursor-pointer"
           >
             <ArrowLeft className="w-3.5 h-3.5" />
-            <span>Reprendre le direct Caméra</span>
+            <span>Couper et revenir au direct</span>
+          </button>
+        </div>
+      )}
+
+      {/* Parallel PiP active banner */}
+      {parallelMediaId && (
+        <div className="mb-4 p-3 bg-purple-950/40 border border-purple-500/50 rounded-xl flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5">
+            <span className="w-2.5 h-2.5 rounded-full bg-purple-400 animate-pulse" />
+            <div>
+              <p className="text-xs font-bold text-purple-200">
+                Vidéo / Publicité en Parallèle (PiP) Active
+              </p>
+              <p className="text-[11px] text-purple-300/80">
+                Diffusée dans un encart pendant que votre caméra et micro continuent en direct simultanément.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={onStopParallelMedia}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-700 hover:bg-purple-600 text-white text-xs font-bold rounded-lg shadow transition cursor-pointer"
+          >
+            <Square className="w-3.5 h-3.5 fill-current" />
+            <span>Arrêter l'encart PiP</span>
           </button>
         </div>
       )}
@@ -155,15 +187,18 @@ export const MediaAdManager: React.FC<MediaAdManagerProps> = ({
       </div>
 
       {/* Grid of media items */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 max-h-64 overflow-y-auto pr-1">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 max-h-72 overflow-y-auto pr-1">
         {filtered.map((item) => {
-          const isSelected = activeMediaId === item.id && isMediaCurrentlyBroadcasting;
+          const isSoloActive = activeMediaId === item.id && isMediaCurrentlyBroadcasting;
+          const isParallelActive = parallelMediaId === item.id;
           return (
             <div
               key={item.id}
               className={`group relative rounded-xl border p-2.5 bg-zinc-950/70 transition flex flex-col justify-between ${
-                isSelected
+                isSoloActive
                   ? 'border-rose-500 bg-rose-950/20 shadow-md shadow-rose-950/30'
+                  : isParallelActive
+                  ? 'border-purple-500 bg-purple-950/20 shadow-md shadow-purple-950/30'
                   : 'border-zinc-800 hover:border-zinc-700'
               }`}
             >
@@ -180,12 +215,22 @@ export const MediaAdManager: React.FC<MediaAdManagerProps> = ({
                     </div>
                   )}
 
-                  <div className="absolute top-1.5 left-1.5">
+                  <div className="absolute top-1.5 left-1.5 flex gap-1">
                     <span className={`px-1.5 py-0.5 text-[9px] font-bold uppercase rounded ${
-                      item.isAd ? 'bg-amber-500/90 text-zinc-950' : 'bg-zinc-900/90 text-zinc-300'
+                      item.isAd ? 'bg-amber-500 text-zinc-950 font-black' : 'bg-zinc-900/90 text-zinc-300'
                     }`}>
                       {item.isAd ? 'Publicité' : item.type === 'video' ? 'Vidéo' : 'Affiche'}
                     </span>
+                    {isParallelActive && (
+                      <span className="px-1.5 py-0.5 text-[9px] font-bold uppercase rounded bg-purple-600 text-white animate-pulse">
+                        PiP En direct
+                      </span>
+                    )}
+                    {isSoloActive && (
+                      <span className="px-1.5 py-0.5 text-[9px] font-bold uppercase rounded bg-rose-600 text-white animate-pulse">
+                        Solo En direct
+                      </span>
+                    )}
                   </div>
 
                   {item.duration && (
@@ -198,23 +243,46 @@ export const MediaAdManager: React.FC<MediaAdManagerProps> = ({
                 <p className="text-xs font-semibold text-zinc-200 truncate">{item.name}</p>
               </div>
 
-              {/* Action */}
-              <div className="mt-2.5 pt-2 border-t border-zinc-800/80">
-                {isSelected ? (
+              {/* Action Buttons: Parallèle or Solo with Auto-Return */}
+              <div className="mt-2.5 pt-2 border-t border-zinc-800/80 space-y-1.5">
+                {isSoloActive ? (
                   <button
                     onClick={onReturnToLiveCamera}
-                    className="w-full py-1.5 px-2 bg-zinc-800 hover:bg-zinc-700 text-rose-300 text-[11px] font-bold rounded-lg transition"
+                    className="w-full py-1.5 px-2 bg-rose-600 hover:bg-rose-500 text-white text-[11px] font-bold rounded-lg transition shadow cursor-pointer flex items-center justify-center gap-1.5"
                   >
-                    Couper et revenir au direct
+                    <ArrowLeft className="w-3 h-3" />
+                    <span>Couper & Revenir au Direct</span>
+                  </button>
+                ) : isParallelActive ? (
+                  <button
+                    onClick={onStopParallelMedia}
+                    className="w-full py-1.5 px-2 bg-purple-600 hover:bg-purple-500 text-white text-[11px] font-bold rounded-lg transition shadow cursor-pointer flex items-center justify-center gap-1.5"
+                  >
+                    <Square className="w-3 h-3 fill-current" />
+                    <span>Arrêter la vidéo PiP</span>
                   </button>
                 ) : (
-                  <button
-                    onClick={() => onSelectMediaToBroadcast(item)}
-                    className="w-full py-1.5 px-2 bg-rose-600/90 hover:bg-rose-500 text-white text-[11px] font-semibold rounded-lg flex items-center justify-center gap-1.5 transition cursor-pointer"
-                  >
-                    <Play className="w-3 h-3 fill-current" />
-                    <span>Diffuser en direct</span>
-                  </button>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {/* Mode 1: Parallèle (PiP) */}
+                    <button
+                      onClick={() => onSelectMediaToBroadcastParallel(item)}
+                      title="Diffuse cette vidéo dans un encart PiP pendant que vous continuez à parler en direct"
+                      className="py-1.5 px-1.5 bg-zinc-800 hover:bg-purple-600 hover:text-white text-zinc-200 text-[10px] font-semibold rounded-lg flex items-center justify-center gap-1 transition cursor-pointer border border-zinc-700/80 hover:border-purple-500"
+                    >
+                      <PictureInPicture className="w-3 h-3 text-purple-400" />
+                      <span>En Parallèle</span>
+                    </button>
+
+                    {/* Mode 2: Solo avec retour automatique au direct */}
+                    <button
+                      onClick={() => onSelectMediaToBroadcastSolo(item, item.duration || 15)}
+                      title="La vidéo prend l'écran seul, puis le live revient automatiquement à la caméra quand elle finit"
+                      className="py-1.5 px-1.5 bg-rose-600/90 hover:bg-rose-500 text-white text-[10px] font-semibold rounded-lg flex items-center justify-center gap-1 transition cursor-pointer shadow"
+                    >
+                      <Play className="w-3 h-3 fill-current" />
+                      <span>Plein Écran</span>
+                    </button>
+                  </div>
                 )}
               </div>
             </div>

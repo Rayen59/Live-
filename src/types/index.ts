@@ -97,6 +97,18 @@ export interface LiveStream {
   isSubOnly?: boolean;
   isRecording?: boolean;
   recordingStartTime?: string;
+  parallelMediaId?: string; // Broadcast ad in parallel (Picture-in-Picture)
+  parallelMediaMode?: 'pip' | 'split' | null;
+  adSoloCountdown?: number; // Countdown when ad is broadcasting solo
+  adAutoReturnTargetSource?: VideoSourceType; // Source to return to automatically
+}
+
+export interface DevicePairingSession {
+  code: string;
+  hostUserId: string;
+  streamId?: string;
+  deviceRole: 'remote_control' | 'mobile_camera' | 'interactive_viewer';
+  lastPing: string;
 }
 
 export interface RecordedVideo {

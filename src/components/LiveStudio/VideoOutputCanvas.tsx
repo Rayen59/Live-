@@ -24,6 +24,9 @@ interface VideoOutputCanvasProps {
   activeSource: VideoSourceType;
   filterSettings: VideoFilterSettings;
   activeMedia?: MediaAsset;
+  parallelMedia?: MediaAsset;
+  onStopParallelMedia?: () => void;
+  onReturnToLiveCamera?: () => void;
   activeSpeakers: MicRequest[];
   isRecording: boolean;
   onToggleRecording: () => void;
@@ -42,6 +45,9 @@ export const VideoOutputCanvas: React.FC<VideoOutputCanvasProps> = ({
   activeSource,
   filterSettings,
   activeMedia,
+  parallelMedia,
+  onStopParallelMedia,
+  onReturnToLiveCamera,
   activeSpeakers,
   isRecording,
   onToggleRecording,
@@ -59,8 +65,33 @@ export const VideoOutputCanvas: React.FC<VideoOutputCanvasProps> = ({
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [recordedDownloadUrl, setRecordedDownloadUrl] = useState<string | null>(null);
   const [liveCaptionText, setLiveCaptionText] = useState<string>('Bienvenue sur le direct ! Posez vos questions dans le chat ou levez la main pour parler.');
+  const [isPipMuted, setIsPipMuted] = useState(false);
+  const [soloRemainingSeconds, setSoloRemainingSeconds] = useState<number>(0);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordedChunksRef = useRef<Blob[]>([]);
+
+  // Automatic countdown & auto-return to live camera when broadcasting media solo
+  useEffect(() => {
+    if ((activeSource === 'media' || activeSource === 'poster') && activeMedia) {
+      const initialSeconds = activeMedia.duration || 15;
+      setSoloRemainingSeconds(initialSeconds);
+
+      const timer = setInterval(() => {
+        setSoloRemainingSeconds((prev) => {
+          if (prev <= 1) {
+            clearInterval(timer);
+            if (onReturnToLiveCamera) onReturnToLiveCamera();
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+
+      return () => clearInterval(timer);
+    } else {
+      setSoloRemainingSeconds(0);
+    }
+  }, [activeSource, activeMedia?.id]);
 
   // Format recording duration (seconds -> HH:MM:SS)
   const formatDuration = (totalSeconds: number) => {
@@ -295,7 +326,7 @@ export const VideoOutputCanvas: React.FC<VideoOutputCanvasProps> = ({
           </>
         )}
 
-        {/* Source: Pre-recorded Video Asset / Ad */}
+        {/* Source: Pre-recorded Video Asset / Ad (Solo Mode) */}
         {activeSource === 'media' && (
           <div className="absolute inset-0 bg-black flex items-center justify-center">
             {activeMedia && activeMedia.type === 'video' ? (
@@ -303,9 +334,11 @@ export const VideoOutputCanvas: React.FC<VideoOutputCanvasProps> = ({
                 ref={mediaAssetVideoRef}
                 src={activeMedia.url}
                 autoPlay
-                loop
                 playsInline
                 controls
+                onEnded={() => {
+                  if (onReturnToLiveCamera) onReturnToLiveCamera();
+                }}
                 style={filterStyle}
                 className="w-full h-full object-contain"
               />
@@ -314,8 +347,34 @@ export const VideoOutputCanvas: React.FC<VideoOutputCanvasProps> = ({
                 Aucune vidéo média sélectionnée dans la galerie.
               </div>
             )}
-            <div className="absolute top-4 right-4 bg-purple-600/90 backdrop-blur-md px-3 py-1 rounded-xl text-xs font-bold text-white shadow-lg flex items-center gap-1.5">
-              <span>{activeMedia?.isAd ? '📢 PUBLICITÉ / SPONSOR' : '🎞️ VIDÉO GALERIE'}</span>
+            
+            {/* Solo Broadcast Banner with Live Auto-Return Countdown */}
+            <div className="absolute top-4 inset-x-4 z-30 flex items-center justify-between bg-zinc-950/90 backdrop-blur-md border border-rose-500/50 p-2.5 rounded-2xl shadow-2xl">
+              <div className="flex items-center gap-2.5">
+                <span className="w-2.5 h-2.5 rounded-full bg-rose-500 animate-ping" />
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-white">
+                      {activeMedia?.isAd ? '📢 PUBLICITÉ EN SOLO' : '🎞️ VIDÉO EN SOLO'}
+                    </span>
+                    <span className="px-2 py-0.5 rounded-md bg-rose-500/20 text-rose-300 font-mono text-[11px] font-black">
+                      Retour direct dans : {soloRemainingSeconds}s
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-zinc-400">
+                    La vidéo s'affiche seule. Le live reviendra automatiquement à la caméra.
+                  </p>
+                </div>
+              </div>
+
+              {onReturnToLiveCamera && (
+                <button
+                  onClick={onReturnToLiveCamera}
+                  className="px-3 py-1.5 bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold rounded-xl shadow cursor-pointer transition flex items-center gap-1.5"
+                >
+                  <span>Reprendre le direct</span>
+                </button>
+              )}
             </div>
           </div>
         )}
@@ -335,8 +394,81 @@ export const VideoOutputCanvas: React.FC<VideoOutputCanvasProps> = ({
                 Aucune affiche sélectionnée.
               </div>
             )}
-            <div className="absolute top-4 right-4 bg-amber-600/90 backdrop-blur-md px-3 py-1 rounded-xl text-xs font-bold text-white shadow-lg">
-              🖼️ PRÉSENTATION / AFFICHE
+            {/* Poster Solo Auto-Return Banner */}
+            <div className="absolute top-4 inset-x-4 z-30 flex items-center justify-between bg-zinc-950/90 backdrop-blur-md border border-amber-500/50 p-2.5 rounded-2xl shadow-2xl">
+              <div className="flex items-center gap-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-ping" />
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-white">🖼️ AFFICHE / PRÉSENTATION</span>
+                    <span className="px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-300 font-mono text-[11px] font-black">
+                      Retour direct dans : {soloRemainingSeconds}s
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-zinc-400">
+                    Affiche seule active. Le direct caméra reprendra automatiquement.
+                  </p>
+                </div>
+              </div>
+              {onReturnToLiveCamera && (
+                <button
+                  onClick={onReturnToLiveCamera}
+                  className="px-3 py-1.5 bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold rounded-xl shadow cursor-pointer transition"
+                >
+                  Reprendre le direct
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Parallel Video / Picture-in-Picture (PiP) Window */}
+        {parallelMedia && (activeSource === 'camera' || activeSource === 'screen') && (
+          <div className="absolute bottom-16 right-4 z-25 w-60 sm:w-72 aspect-video bg-zinc-950 rounded-2xl border-2 border-purple-500 shadow-2xl overflow-hidden flex flex-col animate-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between px-2.5 py-1.5 bg-purple-950/90 border-b border-purple-500/40 text-[10px] font-bold text-purple-200">
+              <div className="flex items-center gap-1.5 truncate">
+                <span className="w-2 h-2 rounded-full bg-purple-400 animate-ping shrink-0" />
+                <span className="truncate">{parallelMedia.name}</span>
+              </div>
+              <div className="flex items-center gap-1 shrink-0">
+                <button
+                  onClick={() => setIsPipMuted(!isPipMuted)}
+                  className="p-1 hover:text-white rounded cursor-pointer"
+                  title={isPipMuted ? 'Activer le son de la vidéo PiP' : 'Couper le son de la vidéo PiP'}
+                >
+                  {isPipMuted ? <VolumeX className="w-3.5 h-3.5 text-zinc-400" /> : <Volume2 className="w-3.5 h-3.5 text-purple-300" />}
+                </button>
+                {onStopParallelMedia && (
+                  <button
+                    onClick={onStopParallelMedia}
+                    className="p-1 hover:text-rose-400 rounded cursor-pointer font-bold"
+                    title="Arrêter l'encart vidéo parallèle"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+            </div>
+            <div className="relative flex-1 bg-black flex items-center justify-center overflow-hidden">
+              {parallelMedia.type === 'video' ? (
+                <video
+                  src={parallelMedia.url}
+                  autoPlay
+                  loop
+                  playsInline
+                  muted={isPipMuted}
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <img
+                  src={parallelMedia.url}
+                  alt={parallelMedia.name}
+                  className="w-full h-full object-cover"
+                />
+              )}
+              <div className="absolute bottom-1.5 left-1.5 bg-black/80 backdrop-blur-md px-1.5 py-0.5 rounded text-[9px] font-bold text-purple-300">
+                📢 DIFFUSION EN PARALLÈLE
+              </div>
             </div>
           </div>
         )}

@@ -37,6 +37,55 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [adminSearchQuery, setAdminSearchQuery] = useState('');
   const [activeAdminTab, setActiveAdminTab] = useState<'users' | 'streams' | 'recordings' | 'logs'>('users');
   const [modLogs, setModLogs] = useState<ModerationLog[]>(StorageService.getModLogs());
+  const [unlockCode, setUnlockCode] = useState('');
+  const [isUnlocked, setIsUnlocked] = useState(currentUser.role === 'admin');
+  const [lockError, setLockError] = useState<string | null>(null);
+
+  if (!isUnlocked && currentUser.role !== 'admin') {
+    return (
+      <div className="max-w-md mx-auto my-12 p-6 bg-zinc-900 border border-zinc-800 rounded-3xl shadow-2xl text-center space-y-4">
+        <div className="w-14 h-14 mx-auto rounded-2xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400">
+          <Lock className="w-7 h-7 animate-pulse" />
+        </div>
+        <div>
+          <h2 className="text-lg font-bold text-white">Espace Administrateur Sécurisé</h2>
+          <p className="text-xs text-zinc-400 mt-1">
+            L'entrée automatique à cette section est désactivée. Veuillez entrer le code secret administrateur pour déverrouiller ce tableau de bord.
+          </p>
+        </div>
+        {lockError && (
+          <div className="p-2.5 rounded-xl bg-red-500/15 border border-red-500/40 text-red-300 text-xs">
+            {lockError}
+          </div>
+        )}
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (unlockCode.trim() === 'admin2026' || unlockCode.trim() === '1234') {
+              setIsUnlocked(true);
+            } else {
+              setLockError('Code PIN administrateur incorrect.');
+            }
+          }}
+          className="space-y-3"
+        >
+          <input
+            type="password"
+            value={unlockCode}
+            onChange={(e) => setUnlockCode(e.target.value)}
+            placeholder="Code PIN administrateur (admin2026)..."
+            className="w-full bg-zinc-950 border border-zinc-800 focus:border-amber-500 rounded-xl p-3 text-white text-xs text-center font-mono tracking-widest focus:outline-none"
+          />
+          <button
+            type="submit"
+            className="w-full py-2.5 px-4 bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs rounded-xl shadow cursor-pointer transition"
+          >
+            Déverrouiller l'Administration
+          </button>
+        </form>
+      </div>
+    );
+  }
 
   // Filter users by admin search query
   const filteredUsers = allUsers.filter((u) => {

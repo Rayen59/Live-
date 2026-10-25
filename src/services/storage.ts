@@ -1,13 +1,13 @@
 import { User, LiveStream, RecordedVideo, ChatMessage, ModerationLog, MediaAsset } from '../types';
 
-// V3 storage keys starting 100% clean and virgin (zero users)
-const USERS_KEY = 'streampulse_users_v3_clean';
-const CURRENT_USER_KEY = 'streampulse_current_user_v3_clean';
-const STREAMS_KEY = 'streampulse_streams_v3_clean';
-const RECORDINGS_KEY = 'streampulse_recordings_v3_clean';
-const CHAT_KEY = 'streampulse_chat_v3_clean';
-const MOD_LOGS_KEY = 'streampulse_mod_logs_v3_clean';
-const MEDIA_KEY = 'streampulse_media_v3_clean';
+// Storage keys
+const USERS_KEY = 'streampulse_users_v4_sync';
+const CURRENT_USER_KEY = 'streampulse_current_user_v4_sync';
+const STREAMS_KEY = 'streampulse_streams_v4_sync';
+const RECORDINGS_KEY = 'streampulse_recordings_v4_sync';
+const CHAT_KEY = 'streampulse_chat_v4_sync';
+const MOD_LOGS_KEY = 'streampulse_mod_logs_v4_sync';
+const MEDIA_KEY = 'streampulse_media_v4_sync';
 
 // Default media clips for studio testing
 const DEFAULT_MEDIA_ASSETS: MediaAsset[] = [
@@ -47,7 +47,69 @@ const DEFAULT_MEDIA_ASSETS: MediaAsset[] = [
 ];
 
 export const StorageService = {
-  // Virgin empty users list (0 users initially)
+  // Synchronize state from server (for PC & Mobile real-time pairing)
+  async syncWithServer(): Promise<{ streams?: LiveStream[]; users?: User[]; recordings?: RecordedVideo[] }> {
+    try {
+      const res = await fetch('/api/sync/state');
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data.streams)) {
+          localStorage.setItem(STREAMS_KEY, JSON.stringify(data.streams));
+        }
+        if (Array.isArray(data.users)) {
+          localStorage.setItem(USERS_KEY, JSON.stringify(data.users));
+        }
+        if (Array.isArray(data.recordings)) {
+          localStorage.setItem(RECORDINGS_KEY, JSON.stringify(data.recordings));
+        }
+        return data;
+      }
+    } catch {}
+    return {};
+  },
+
+  // Subscribe to real-time events between PC and Phone via Server-Sent Events (SSE)
+  subscribeToSyncEvents(onEvent: (event: { type: string; data: any }) => void): () => void {
+    try {
+      const evtSource = new EventSource('/api/sync/events');
+      evtSource.onmessage = (e) => {
+        try {
+          const parsed = JSON.parse(e.data);
+          onEvent(parsed);
+        } catch {}
+      };
+      return () => {
+        evtSource.close();
+      };
+    } catch {
+      return () => {};
+    }
+  },
+
+  // Pair PC and Mobile with a 6-digit sync code
+  async createPairing(hostUserId: string, streamId?: string, deviceRole: 'remote_control' | 'mobile_camera' | 'interactive_viewer' = 'remote_control'): Promise<{ success: boolean; code?: string; session?: any }> {
+    try {
+      const res = await fetch('/api/sync/pair', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ hostUserId, streamId, deviceRole }),
+      });
+      if (res.ok) return await res.json();
+    } catch {}
+    const fallbackCode = Math.floor(100000 + Math.random() * 900000).toString();
+    return { success: true, code: fallbackCode };
+  },
+
+  async getPairing(code: string): Promise<{ success: boolean; session?: any; error?: string }> {
+    try {
+      const res = await fetch(`/api/sync/pair/${encodeURIComponent(code)}`);
+      if (res.ok) return await res.json();
+      return { success: false, error: 'Code de liaison non trouvé.' };
+    } catch {
+      return { success: false, error: 'Erreur réseau de liaison.' };
+    }
+  },
+
   getUsers(): User[] {
     const raw = localStorage.getItem(USERS_KEY);
     if (!raw) {
@@ -83,7 +145,6 @@ export const StorageService = {
     }
   },
 
-  // Account Registration with Strict Unique Email validation
   registerUser(data: {
     email: string;
     username: string;
@@ -95,7 +156,7 @@ export const StorageService = {
     const allUsers = this.getUsers();
     const cleanEmail = data.email.trim().toLowerCase();
 
-    // STRICT UNIQUE EMAIL CHECK (requested specifically by user)
+    // STRICT UNIQUE EMAIL CHECK
     const existingEmail = allUsers.find((u) => u.email.toLowerCase() === cleanEmail);
     if (existingEmail) {
       return {
@@ -104,7 +165,6 @@ export const StorageService = {
       };
     }
 
-    // Check unique username
     const existingUsername = allUsers.find((u) => u.username.toLowerCase() === data.username.trim().toLowerCase());
     if (existingUsername) {
       return {
@@ -130,6 +190,13 @@ export const StorageService = {
     allUsers.push(newUser);
     localStorage.setItem(USERS_KEY, JSON.stringify(allUsers));
     this.setCurrentUser(newUser);
+
+    // Sync to server asynchronously
+    fetch('/api/sync/user', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(newUser),
+    }).catch(() => {});
 
     return { success: true, user: newUser };
   },
@@ -158,7 +225,6 @@ export const StorageService = {
     this.setCurrentUser(null);
   },
 
-  // Reset entire database to blank virgin state
   resetToVirgin(): void {
     localStorage.removeItem(USERS_KEY);
     localStorage.removeItem(CURRENT_USER_KEY);
@@ -166,6 +232,8 @@ export const StorageService = {
     localStorage.removeItem(RECORDINGS_KEY);
     localStorage.removeItem(CHAT_KEY);
     localStorage.removeItem(MOD_LOGS_KEY);
+
+    fetch('/api/sync/reset', { method: 'POST' }).catch(() => {});
   },
 
   updateUser(updated: User): void {
@@ -203,11 +271,22 @@ export const StorageService = {
       all.unshift(stream);
     }
     localStorage.setItem(STREAMS_KEY, JSON.stringify(all));
+
+    // Post to server for cross-device sync
+    fetch('/api/sync/stream', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(stream),
+    }).catch(() => {});
   },
 
   deleteStream(streamId: string): void {
     const all = this.getStreams().filter((s) => s.id !== streamId);
     localStorage.setItem(STREAMS_KEY, JSON.stringify(all));
+
+    fetch(`/api/sync/stream/${encodeURIComponent(streamId)}`, {
+      method: 'DELETE',
+    }).catch(() => {});
   },
 
   getRecordings(): RecordedVideo[] {
@@ -227,6 +306,12 @@ export const StorageService = {
     const all = this.getRecordings();
     all.unshift(video);
     localStorage.setItem(RECORDINGS_KEY, JSON.stringify(all));
+
+    fetch('/api/sync/recording', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(video),
+    }).catch(() => {});
   },
 
   deleteRecording(id: string): void {
@@ -267,11 +352,26 @@ export const StorageService = {
     const all = this.getChatMessages(message.streamId);
     all.push(message);
     localStorage.setItem(`${CHAT_KEY}_${message.streamId}`, JSON.stringify(all.slice(-150)));
+
+    // Send to server for real-time broadcast to mobile & PC
+    fetch('/api/sync/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(message),
+    }).catch(() => {});
   },
 
   deleteChatMessage(streamId: string, messageId: string): void {
     const all = this.getChatMessages(streamId).filter((m) => m.id !== messageId);
     localStorage.setItem(`${CHAT_KEY}_${streamId}`, JSON.stringify(all));
+  },
+
+  sendMicAction(action: 'request' | 'accept' | 'decline' | 'mute' | 'remove', streamId: string, payload?: any): void {
+    fetch('/api/sync/mic', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action, streamId, ...payload }),
+    }).catch(() => {});
   },
 
   getModLogs(): ModerationLog[] {

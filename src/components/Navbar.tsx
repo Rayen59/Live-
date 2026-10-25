@@ -10,7 +10,9 @@ import {
   Film, 
   Compass, 
   ChevronDown,
-  Sparkles
+  Sparkles,
+  Smartphone,
+  Lock
 } from 'lucide-react';
 import { User } from '../types';
 
@@ -20,6 +22,8 @@ interface NavbarProps {
   setActiveTab: (tab: 'feed' | 'studio' | 'channel' | 'admin') => void;
   onOpenAuth: () => void;
   onOpenNewLiveModal: () => void;
+  onOpenPairingModal: () => void;
+  onRequestAdminAccess: () => void;
   searchQuery: string;
   setSearchQuery: (query: string) => void;
   onSwitchUser: (user: User) => void;
@@ -34,6 +38,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   setActiveTab,
   onOpenAuth,
   onOpenNewLiveModal,
+  onOpenPairingModal,
+  onRequestAdminAccess,
   searchQuery,
   setSearchQuery,
   onSwitchUser,
@@ -105,7 +111,13 @@ export const Navbar: React.FC<NavbarProps> = ({
               <span>Ma Chaîne & Replays</span>
             </button>
             <button
-              onClick={() => setActiveTab('admin')}
+              onClick={() => {
+                if (currentUser.role === 'admin') {
+                  setActiveTab('admin');
+                } else {
+                  onRequestAdminAccess();
+                }
+              }}
               className={`flex items-center gap-2 px-3 py-1.5 rounded-lg transition ${
                 activeTab === 'admin'
                   ? 'bg-amber-500/15 text-amber-300 border border-amber-500/30 font-semibold'
@@ -141,7 +153,17 @@ export const Navbar: React.FC<NavbarProps> = ({
         </div>
 
         {/* Right CTA & User Profile */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3">
+          {/* PC ↔ Mobile Pairing CTA */}
+          <button
+            onClick={onOpenPairingModal}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white border border-zinc-800 text-xs font-semibold transition cursor-pointer shadow-sm"
+            title="Relier un smartphone au studio PC en temps réel"
+          >
+            <Smartphone className="w-4 h-4 text-rose-400 animate-pulse" />
+            <span className="hidden sm:inline">Liaison Mobile</span>
+          </button>
+
           {/* Create Live CTA */}
           <button
             onClick={onOpenNewLiveModal}
@@ -217,7 +239,13 @@ export const Navbar: React.FC<NavbarProps> = ({
                 </button>
 
                 <button
-                  onClick={() => setActiveTab('admin')}
+                  onClick={() => {
+                    if (currentUser.role === 'admin') {
+                      setActiveTab('admin');
+                    } else {
+                      onRequestAdminAccess();
+                    }
+                  }}
                   className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-zinc-300 hover:text-white hover:bg-zinc-800/80 rounded-lg transition"
                 >
                   <ShieldCheck className="w-4 h-4 text-amber-400" />
