@@ -11,7 +11,8 @@ import {
   Share2, 
   Edit3, 
   Trash2, 
-  Radio
+  Radio,
+  Scissors
 } from 'lucide-react';
 import { User, RecordedVideo } from '../../types';
 import { StorageService } from '../../services/storage';
@@ -23,6 +24,7 @@ interface ChannelPageProps {
   onPlayRecording: (video: RecordedVideo) => void;
   onDeleteRecording: (id: string) => void;
   onStartLive: () => void;
+  onOpenVideoEditor?: (video: RecordedVideo) => void;
 }
 
 export const ChannelPage: React.FC<ChannelPageProps> = ({
@@ -32,6 +34,7 @@ export const ChannelPage: React.FC<ChannelPageProps> = ({
   onPlayRecording,
   onDeleteRecording,
   onStartLive,
+  onOpenVideoEditor,
 }) => {
   const [activeTab, setActiveTab] = useState<'videos' | 'about'>('videos');
   const [isEditingBio, setIsEditingBio] = useState(false);
@@ -212,6 +215,17 @@ export const ChannelPage: React.FC<ChannelPageProps> = ({
                     </div>
 
                     <div className="flex items-center gap-2">
+                      {isOwner && onOpenVideoEditor && (
+                        <button
+                          onClick={() => onOpenVideoEditor(rec)}
+                          className="flex items-center gap-1 px-2.5 py-1 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 rounded-lg text-xs font-semibold transition cursor-pointer"
+                          title="Modifier ou couper des instants de la vidéo"
+                        >
+                          <Scissors className="w-3.5 h-3.5" />
+                          <span>Modifier</span>
+                        </button>
+                      )}
+
                       {rec.videoUrl && (
                         <a
                           href={rec.videoUrl}

@@ -244,27 +244,23 @@ export const LiveViewer: React.FC<LiveViewerProps> = ({
             } bg-zinc-950 overflow-hidden border border-zinc-800 shadow-2xl flex items-center justify-center transition-all duration-300 cursor-pointer select-none`}
             title="Double-cliquez pour envoyer un cœur ❤️"
           >
-            {/* Simulated Live Stream Feed or Video */}
+            {/* Live Streaming Video Broadcast Feed */}
             <div className="absolute inset-0 overflow-hidden" style={filterStyle}>
-              {stream.activeSource === 'media' ? (
-                <video
-                  src="https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4"
-                  autoPlay
-                  loop
-                  muted
-                  playsInline
-                  className="w-full h-full object-cover"
-                />
-              ) : (
-                <div className="relative w-full h-full">
-                  <img
-                    src={stream.thumbnail}
-                    alt={stream.title}
-                    className="w-full h-full object-cover"
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-zinc-950/80 via-transparent to-black/40" />
-                </div>
-              )}
+              <video
+                src={
+                  stream.activeSource === 'media' && stream.sponsorVideoUrl
+                    ? stream.sponsorVideoUrl
+                    : stream.category === 'Gaming'
+                    ? 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4'
+                    : 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4'
+                }
+                autoPlay
+                loop
+                playsInline
+                muted
+                className="w-full h-full object-cover"
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-zinc-950/40 via-transparent to-black/20 pointer-events-none" />
             </div>
 
             {/* Floating Live Badge */}
@@ -286,25 +282,36 @@ export const LiveViewer: React.FC<LiveViewerProps> = ({
             </div>
 
             {/* Automated TV-Style News Ticker Marquee */}
-            {stream.activeBannerText && (
-              <div className="absolute bottom-0 inset-x-0 h-7 sm:h-8 bg-zinc-950/95 backdrop-blur-md border-t border-rose-500/40 flex items-center text-xs text-zinc-100 z-20 shadow-xl overflow-hidden select-none">
-                <div className="flex items-center gap-1 px-2.5 py-1 bg-gradient-to-r from-red-600 to-rose-600 text-white font-extrabold text-[9px] uppercase tracking-wider shrink-0 z-30 shadow-md">
-                  <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
-                  <span>TV LIVE</span>
-                </div>
-                <div className="flex-1 overflow-hidden relative h-full flex items-center px-3">
-                  <div className={`whitespace-nowrap font-medium text-[11px] text-zinc-200 tracking-wide ${stream.isTickerActive !== false ? 'animate-tv-ticker' : ''}`}>
-                    <span>{stream.activeBannerText}</span>
-                    <span className="mx-6 text-rose-500 font-bold">•</span>
-                    <span className="text-zinc-400">Diffusion StreamPulse Live</span>
-                    <span className="mx-6 text-rose-500 font-bold">•</span>
-                    <span className="text-rose-400 font-semibold">{stream.title}</span>
-                    <span className="mx-6 text-rose-500 font-bold">•</span>
-                    <span>{stream.activeBannerText}</span>
+            <div className="absolute bottom-0 inset-x-0 h-8 bg-zinc-950/95 backdrop-blur-md border-t border-rose-500/50 flex items-center text-xs text-zinc-100 z-30 shadow-xl overflow-hidden select-none">
+              <div className="flex items-center gap-1.5 px-2.5 py-1 bg-gradient-to-r from-red-600 to-rose-600 text-white font-extrabold text-[9px] uppercase tracking-wider shrink-0 z-30 shadow-md">
+                <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+                <span>TV LIVE</span>
+              </div>
+              <div className="flex-1 overflow-hidden relative h-full flex items-center px-2">
+                <div className={`flex items-center gap-6 ${stream.isTickerActive !== false ? 'animate-tv-ticker' : 'overflow-x-auto'}`}>
+                  <div className="flex items-center gap-5 shrink-0 font-medium text-[11px] text-zinc-100">
+                    <span className="text-rose-400 font-bold">🔴 {stream.activeBannerText || 'DIRECT STREAMING'}</span>
+                    <span className="text-zinc-500 font-bold">•</span>
+                    <span className="text-white font-semibold">{stream.title}</span>
+                    <span className="text-zinc-500 font-bold">•</span>
+                    <span className="text-amber-400">@{stream.creatorName}</span>
+                    <span className="text-zinc-500 font-bold">•</span>
+                    <span className="text-emerald-400">📱 Synchronisé Téléphones & PC</span>
+                    <span className="text-zinc-500 font-bold">•</span>
+                  </div>
+                  <div className="flex items-center gap-5 shrink-0 font-medium text-[11px] text-zinc-100" aria-hidden="true">
+                    <span className="text-rose-400 font-bold">🔴 {stream.activeBannerText || 'DIRECT STREAMING'}</span>
+                    <span className="text-zinc-500 font-bold">•</span>
+                    <span className="text-white font-semibold">{stream.title}</span>
+                    <span className="text-zinc-500 font-bold">•</span>
+                    <span className="text-amber-400">@{stream.creatorName}</span>
+                    <span className="text-zinc-500 font-bold">•</span>
+                    <span className="text-emerald-400">📱 Synchronisé Téléphones & PC</span>
+                    <span className="text-zinc-500 font-bold">•</span>
                   </div>
                 </div>
               </div>
-            )}
+            </div>
 
             {/* Floating Hearts Animation */}
             {floatingHearts.map((h) => (

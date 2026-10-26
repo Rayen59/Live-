@@ -15,7 +15,8 @@ import {
   Mic,
   Smartphone,
   RefreshCw,
-  Camera
+  Camera,
+  Scissors
 } from 'lucide-react';
 import { VideoFilterSettings, VideoSourceType, MediaAsset, MicRequest, RecordedVideo } from '../../types';
 import { StorageService } from '../../services/storage';
@@ -46,6 +47,7 @@ interface VideoOutputCanvasProps {
   onLaunchSponsorVideo?: (url: string, title?: string) => void;
   sponsorVideoUrl?: string;
   sponsorVideoTitle?: string;
+  onOpenVideoEditor?: (video: RecordedVideo) => void;
 }
 
 export const VideoOutputCanvas: React.FC<VideoOutputCanvasProps> = ({
@@ -74,6 +76,7 @@ export const VideoOutputCanvas: React.FC<VideoOutputCanvasProps> = ({
   onLaunchSponsorVideo,
   sponsorVideoUrl,
   sponsorVideoTitle,
+  onOpenVideoEditor,
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const mediaAssetVideoRef = useRef<HTMLVideoElement>(null);
@@ -81,6 +84,7 @@ export const VideoOutputCanvas: React.FC<VideoOutputCanvasProps> = ({
   const [streamObj, setStreamObj] = useState<MediaStream | null>(null);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [recordedDownloadUrl, setRecordedDownloadUrl] = useState<string | null>(null);
+  const [lastSavedVideo, setLastSavedVideo] = useState<RecordedVideo | null>(null);
   const [liveCaptionText, setLiveCaptionText] = useState<string>('Bienvenue sur le direct ! Posez vos questions dans le chat ou levez la main pour parler.');
   const [isPipMuted, setIsPipMuted] = useState(false);
   const [soloRemainingSeconds, setSoloRemainingSeconds] = useState<number>(0);
@@ -224,6 +228,7 @@ export const VideoOutputCanvas: React.FC<VideoOutputCanvasProps> = ({
             aiSummary: `Enregistrement officiel de la session "${streamTitle}". Qualité 1080p avec netteté ajustée.`,
             tags: [category, 'Replay', 'Studio'],
           };
+          setLastSavedVideo(savedVideo);
           StorageService.saveRecording(savedVideo);
           if (onRecordingSaved) onRecordingSaved(savedVideo);
         };
@@ -328,14 +333,28 @@ export const VideoOutputCanvas: React.FC<VideoOutputCanvasProps> = ({
             </button>
           )}
 
+          {/* Action to Edit / Trim / Cut Recorded Session */}
+          {lastSavedVideo && onOpenVideoEditor && (
+            <button
+              onClick={() => onOpenVideoEditor(lastSavedVideo)}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white rounded-xl font-bold transition shadow-md cursor-pointer animate-in zoom-in-95 duration-200"
+              title="Modifier la vidéo ou supprimer des instants précis"
+            >
+              <Scissors className="w-3.5 h-3.5" />
+              <span>✂️ Modifier & Couper la vidéo</span>
+            </button>
+          )}
+
+          {/* Download to Device Storage */}
           {recordedDownloadUrl && (
             <a
               href={recordedDownloadUrl}
-              download={`stream-${Date.now()}.webm`}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-semibold transition shadow"
+              download={`${streamTitle.replace(/[^a-zA-Z0-9_-]/g, '_') || 'session_live'}.webm`}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-bold transition shadow"
+              title="Enregistrer la vidéo sur la mémoire de votre téléphone ou votre PC"
             >
               <Download className="w-3.5 h-3.5" />
-              <span>Télécharger le Replay</span>
+              <span>Enregistrer sur mon appareil</span>
             </a>
           )}
         </div>
@@ -350,59 +369,44 @@ export const VideoOutputCanvas: React.FC<VideoOutputCanvasProps> = ({
             : 'aspect-video w-full rounded-2xl'
         } bg-zinc-950 overflow-hidden border border-zinc-800 shadow-2xl flex items-center justify-center group select-none transition-all duration-300`}
       >
-        {/* Source: Camera or Screen */}
+        {/* Source: Camera or Screen (Always plays active HD broadcast video feed) */}
         {(activeSource === 'camera' || activeSource === 'screen') && (
-          <>
-            {cameraError ? (
-              <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-center bg-gradient-to-b from-zinc-900 to-zinc-950">
-                <div className="w-16 h-16 rounded-2xl bg-zinc-800/80 border border-zinc-700 flex items-center justify-center text-rose-400 mb-3 shadow-inner">
-                  <Radio className="w-8 h-8 animate-pulse" />
-                </div>
-                <h4 className="text-base font-bold text-white mb-1">
-                  Flux Vidéo Live StreamPulse Simulation HD
-                </h4>
-                <p className="text-xs text-zinc-400 max-w-md mb-4">
-                  {cameraError}
-                </p>
-                <div className="flex items-center gap-2 bg-zinc-900/90 border border-zinc-800 px-3 py-1.5 rounded-xl text-xs text-emerald-400">
-                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-                  <span>Flux de secours dynamique actif (1080p 60fps)</span>
-                </div>
+          <div className="relative w-full h-full flex items-center justify-center bg-zinc-950">
+            <video
+              ref={videoRef}
+              src={!streamObj ? 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4' : undefined}
+              autoPlay
+              loop={!streamObj}
+              playsInline
+              muted
+              style={filterStyle}
+              className="w-full h-full object-cover transition-all duration-200"
+            />
+
+            {!streamObj && (
+              <div className="absolute top-14 left-4 z-20 flex items-center gap-1.5 bg-black/80 backdrop-blur-md border border-white/10 px-2.5 py-1 rounded-xl text-[10px] text-emerald-400 font-semibold shadow-xl">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping shrink-0" />
+                <span>Flux Direct Broadcast HD 1080p Actif</span>
               </div>
-            ) : (
-              <video
-                ref={videoRef}
-                autoPlay
-                playsInline
-                muted
-                style={filterStyle}
-                className="w-full h-full object-cover transition-all duration-200"
-              />
             )}
-          </>
+          </div>
         )}
 
         {/* Source: Pre-recorded Video Asset / Ad (Solo Mode) */}
         {activeSource === 'media' && (
           <div className="absolute inset-0 bg-black flex items-center justify-center">
-            {activeMedia && activeMedia.type === 'video' ? (
-              <video
-                ref={mediaAssetVideoRef}
-                src={activeMedia.url}
-                autoPlay
-                playsInline
-                controls
-                onEnded={() => {
-                  if (onReturnToLiveCamera) onReturnToLiveCamera();
-                }}
-                style={filterStyle}
-                className="w-full h-full object-contain"
-              />
-            ) : (
-              <div className="text-center text-zinc-400 text-xs">
-                Aucune vidéo média sélectionnée dans la galerie.
-              </div>
-            )}
+            <video
+              ref={mediaAssetVideoRef}
+              src={activeMedia?.url || 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4'}
+              autoPlay
+              playsInline
+              controls
+              onEnded={() => {
+                if (onReturnToLiveCamera) onReturnToLiveCamera();
+              }}
+              style={filterStyle}
+              className="w-full h-full object-contain"
+            />
             
             {/* Solo Broadcast Banner with Live Auto-Return Countdown */}
             <div className="absolute top-4 inset-x-4 z-30 flex items-center justify-between bg-zinc-950/90 backdrop-blur-md border border-rose-500/50 p-2.5 rounded-2xl shadow-2xl">
@@ -606,27 +610,36 @@ export const VideoOutputCanvas: React.FC<VideoOutputCanvasProps> = ({
         )}
 
         {/* AUTOMATED TV-STYLE NEWS TICKER MARQUEE (Bandeau d'information défilant type Télévision) */}
-        <div className="absolute bottom-0 inset-x-0 h-8 sm:h-9 bg-zinc-950/95 backdrop-blur-md border-t border-rose-500/40 flex items-center justify-between text-xs text-zinc-100 z-20 shadow-2xl overflow-hidden select-none">
+        <div className="absolute bottom-0 inset-x-0 h-8 sm:h-9 bg-zinc-950/95 backdrop-blur-md border-t border-rose-500/50 flex items-center justify-between text-xs text-zinc-100 z-30 shadow-2xl overflow-hidden select-none">
           {/* TV Label Badge (Static on the left, like TV channels) */}
-          <div className="flex items-center gap-1 px-3 py-1 bg-gradient-to-r from-red-600 to-rose-600 text-white font-extrabold text-[10px] uppercase tracking-wider shrink-0 z-30 shadow-md">
+          <div className="flex items-center gap-1.5 px-3 py-1 bg-gradient-to-r from-red-600 to-rose-600 text-white font-extrabold text-[10px] uppercase tracking-wider shrink-0 z-30 shadow-md">
             <span className="w-2 h-2 rounded-full bg-white animate-pulse" />
             <span>TV LIVE</span>
           </div>
 
-          {/* Scrolling Marquee Container */}
-          <div className="flex-1 overflow-hidden relative h-full flex items-center px-3">
-            <div
-              className={`whitespace-nowrap font-medium text-[11px] sm:text-xs text-zinc-200 tracking-wide ${
-                isTickerRunning ? 'animate-tv-ticker' : ''
-              }`}
-            >
-              <span>{bannerTickerText}</span>
-              <span className="mx-6 text-rose-500 font-bold">•</span>
-              <span className="text-zinc-400">Diffusion StreamPulse Studio</span>
-              <span className="mx-6 text-rose-500 font-bold">•</span>
-              <span className="text-rose-400 font-semibold">{streamTitle}</span>
-              <span className="mx-6 text-rose-500 font-bold">•</span>
-              <span>{bannerTickerText}</span>
+          {/* Scrolling Marquee Container (Immediate start at 0% with seamless doubled blocks) */}
+          <div className="flex-1 overflow-hidden relative h-full flex items-center px-2">
+            <div className={`flex items-center gap-6 ${isTickerRunning ? 'animate-tv-ticker' : 'overflow-x-auto'}`}>
+              <div className="flex items-center gap-5 shrink-0 font-medium text-[11px] sm:text-xs text-zinc-100">
+                <span className="text-rose-400 font-bold">🔴 {bannerTickerText || 'DIRECT STREAMING PRO'}</span>
+                <span className="text-zinc-500 font-bold">•</span>
+                <span className="text-white font-semibold">{streamTitle}</span>
+                <span className="text-zinc-500 font-bold">•</span>
+                <span className="text-amber-400">@{creatorName}</span>
+                <span className="text-zinc-500 font-bold">•</span>
+                <span className="text-emerald-400">📱 Synchronisé Téléphones & PC</span>
+                <span className="text-zinc-500 font-bold">•</span>
+              </div>
+              <div className="flex items-center gap-5 shrink-0 font-medium text-[11px] sm:text-xs text-zinc-100" aria-hidden="true">
+                <span className="text-rose-400 font-bold">🔴 {bannerTickerText || 'DIRECT STREAMING PRO'}</span>
+                <span className="text-zinc-500 font-bold">•</span>
+                <span className="text-white font-semibold">{streamTitle}</span>
+                <span className="text-zinc-500 font-bold">•</span>
+                <span className="text-amber-400">@{creatorName}</span>
+                <span className="text-zinc-500 font-bold">•</span>
+                <span className="text-emerald-400">📱 Synchronisé Téléphones & PC</span>
+                <span className="text-zinc-500 font-bold">•</span>
+              </div>
             </div>
           </div>
 
@@ -656,6 +669,36 @@ export const VideoOutputCanvas: React.FC<VideoOutputCanvasProps> = ({
               <Maximize className="w-3.5 h-3.5" />
             </button>
           </div>
+        </div>
+      </div>
+
+      {/* External TV Ticker Dock Strip (Visible and accessible directly under the monitor) */}
+      <div className="p-3 bg-zinc-900 border border-zinc-800 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse shrink-0" />
+          <span className="font-bold text-white uppercase text-[10px] tracking-wider px-2 py-0.5 rounded bg-red-600/20 text-red-300 border border-red-500/30 shrink-0">
+            Bandeau TV Live
+          </span>
+          <p className="text-zinc-300 text-xs truncate">
+            {bannerTickerText || '🔴 DIRECT STREAMING · Posez vos questions et demandez la parole !'}
+          </p>
+        </div>
+
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            onClick={() => {
+              const next = !isTickerRunning;
+              setIsTickerRunning(next);
+              if (onToggleTicker) onToggleTicker();
+            }}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5 shadow ${
+              isTickerRunning
+                ? 'bg-amber-600 hover:bg-amber-500 text-white'
+                : 'bg-emerald-600 hover:bg-emerald-500 text-white'
+            }`}
+          >
+            <span>{isTickerRunning ? '⏸ Stopper le bandeau' : '▶ Lancer le bandeau TV'}</span>
+          </button>
         </div>
       </div>
     </div>

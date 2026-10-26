@@ -127,6 +127,9 @@ export interface RecordedVideo {
   aiSummary?: string;
   aiKeyMoments?: string[];
   tags: string[];
+  trimStart?: number;
+  trimEnd?: number;
+  cuts?: { id: string; start: number; end: number; reason?: string }[];
 }
 
 export interface ModerationLog {

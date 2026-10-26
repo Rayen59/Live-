@@ -241,11 +241,24 @@ async function bootstrap() {
     res.json({ success: true, session });
   });
 
-  // Save recorded video across devices
+  // Save / Update recorded video across devices
   app.post('/api/sync/recording', (req, res) => {
     const rec = req.body;
     if (!rec || !rec.id) return res.status(400).json({ error: 'Enregistrement invalide' });
-    sharedState.recordings.unshift(rec);
+    const idx = sharedState.recordings.findIndex((r) => r.id === rec.id);
+    if (idx !== -1) {
+      sharedState.recordings[idx] = { ...sharedState.recordings[idx], ...rec };
+    } else {
+      sharedState.recordings.unshift(rec);
+    }
+    broadcastSSE('recordings_updated', sharedState.recordings);
+    res.json({ success: true, recording: rec });
+  });
+
+  // Delete recorded video across devices
+  app.delete('/api/sync/recording/:id', (req, res) => {
+    const { id } = req.params;
+    sharedState.recordings = sharedState.recordings.filter((r) => r.id !== id);
     broadcastSSE('recordings_updated', sharedState.recordings);
     res.json({ success: true });
   });

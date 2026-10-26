@@ -280,7 +280,12 @@ export const StorageService = {
 
   saveRecording(video: RecordedVideo): void {
     const all = this.getRecordings();
-    all.unshift(video);
+    const idx = all.findIndex((r) => r.id === video.id);
+    if (idx !== -1) {
+      all[idx] = video;
+    } else {
+      all.unshift(video);
+    }
     localStorage.setItem(RECORDINGS_KEY, JSON.stringify(all));
 
     fetch('/api/sync/recording', {
@@ -293,6 +298,10 @@ export const StorageService = {
   deleteRecording(id: string): void {
     const all = this.getRecordings().filter((r) => r.id !== id);
     localStorage.setItem(RECORDINGS_KEY, JSON.stringify(all));
+
+    fetch(`/api/sync/recording/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    }).catch(() => {});
   },
 
   getMediaAssets(): MediaAsset[] {

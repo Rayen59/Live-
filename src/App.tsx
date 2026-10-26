@@ -11,6 +11,7 @@ import { VideoPlayerModal } from './components/VideoPlayerModal';
 import { AdminAccessModal } from './components/Admin/AdminAccessModal';
 import { EntranceGate } from './components/EntranceGate';
 import { SearchPage } from './components/Search/SearchPage';
+import { VideoEditorModal } from './components/Recording/VideoEditorModal';
 import { StorageService } from './services/storage';
 import { User, LiveStream, RecordedVideo } from './types';
 import { CheckCircle2 } from 'lucide-react';
@@ -28,6 +29,10 @@ export default function App() {
   const [selectedChannelUser, setSelectedChannelUser] = useState<User | null>(currentUser);
   const [playingRecording, setPlayingRecording] = useState<RecordedVideo | null>(null);
 
+  // Video Editor Modal State (Modifier et couper la vidéo / Replay)
+  const [editingRecording, setEditingRecording] = useState<RecordedVideo | null>(null);
+  const [isEditorOpen, setIsEditorOpen] = useState(false);
+
   // Search State
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -37,36 +42,63 @@ export default function App() {
   const [isAdminAccessModalOpen, setIsAdminAccessModalOpen] = useState(false);
   const [notificationToast, setNotificationToast] = useState<string | null>(null);
 
-  // Cross-device Real-Time Sync (PC & Smartphone connection via Server-Sent Events)
+  // Cross-device Real-Time Sync (PC & Smartphone connection via SSE + automatic polling)
   useEffect(() => {
     // Initial sync from server
-    StorageService.syncWithServer().then((data) => {
-      if (Array.isArray(data.streams)) setAllStreams(data.streams);
-      if (Array.isArray(data.users)) setAllUsers(data.users);
-      if (Array.isArray(data.recordings)) setAllRecordings(data.recordings);
-    });
+    const fetchSync = () => {
+      StorageService.syncWithServer().then((data) => {
+        if (Array.isArray(data.streams)) setAllStreams(data.streams);
+        if (Array.isArray(data.users)) setAllUsers(data.users);
+        if (Array.isArray(data.recordings)) setAllRecordings(data.recordings);
+      });
+    };
+
+    fetchSync();
+
+    // Regular polling fallback every 2.5s for seamless multi-device live sync
+    const pollTimer = setInterval(fetchSync, 2500);
 
     // Subscribe to server-sent events for instant sync across devices
     const unsubscribe = StorageService.subscribeToSyncEvents((event) => {
-      if (event.type === 'stream_updated' && event.data) {
-        setAllStreams((prev) => {
-          const exists = prev.some((s) => s.id === event.data.id);
-          if (exists) {
-            return prev.map((s) => (s.id === event.data.id ? event.data : s));
-          }
-          return [event.data, ...prev];
-        });
-      } else if (event.type === 'stream_ended' && event.data?.streamId) {
-        setAllStreams((prev) => prev.filter((s) => s.id !== event.data.streamId));
-      } else if (event.type === 'user_registered' && event.data) {
-        setAllUsers((prev) => {
-          if (prev.some((u) => u.id === event.data.id)) return prev;
-          return [...prev, event.data];
-        });
+      if (event.type === 'stream_updated') {
+        const streamList = event.data?.streams;
+        const singleStream = event.data?.stream || event.data;
+        if (Array.isArray(streamList)) {
+          setAllStreams(streamList);
+        } else if (singleStream && singleStream.id) {
+          setAllStreams((prev) => {
+            const exists = prev.some((s) => s.id === singleStream.id);
+            if (exists) {
+              return prev.map((s) => (s.id === singleStream.id ? singleStream : s));
+            }
+            return [singleStream, ...prev];
+          });
+        }
+      } else if (event.type === 'stream_ended') {
+        const streamId = event.data?.streamId || event.data?.id;
+        const streamList = event.data?.streams;
+        if (Array.isArray(streamList)) {
+          setAllStreams(streamList);
+        } else if (streamId) {
+          setAllStreams((prev) => prev.filter((s) => s.id !== streamId));
+        }
+      } else if (event.type === 'recordings_updated' || event.type === 'recording_saved') {
+        const recList = event.data?.recordings || event.data;
+        if (Array.isArray(recList)) {
+          setAllRecordings(recList);
+        }
+      } else if (event.type === 'users_updated' || event.type === 'user_registered') {
+        const userList = event.data?.users || event.data;
+        if (Array.isArray(userList)) {
+          setAllUsers(userList);
+        }
       }
     });
 
-    return () => unsubscribe();
+    return () => {
+      clearInterval(pollTimer);
+      unsubscribe();
+    };
   }, []);
 
   const showToast = (msg: string) => {
@@ -121,7 +153,24 @@ export default function App() {
   // Handle Saved Recording
   const handleRecordingSaved = (savedVideo: RecordedVideo) => {
     setAllRecordings((prev) => [savedVideo, ...prev]);
-    showToast(`Session enregistrée avec succès dans votre chaîne !`);
+    setEditingRecording(savedVideo);
+    showToast(`Session enregistrée avec succès ! Prête pour l'édition ou le partage.`);
+  };
+
+  // Video Editing Handlers
+  const handleOpenVideoEditor = (video: RecordedVideo) => {
+    setEditingRecording(video);
+    setIsEditorOpen(true);
+  };
+
+  const handleSaveEditedRecording = (editedVideo: RecordedVideo) => {
+    StorageService.saveRecording(editedVideo);
+    setAllRecordings((prev) => [editedVideo, ...prev.filter((r) => r.id !== editedVideo.id)]);
+    showToast('Vidéo modifiée et publiée avec succès sur votre profil !');
+  };
+
+  const handleDownloadVideo = (video: RecordedVideo) => {
+    showToast(`Téléchargement de "${video.title}" lancé sur votre appareil !`);
   };
 
   // Delete Recording
@@ -238,6 +287,7 @@ export default function App() {
                 }}
                 onEndLiveStream={handleEndLiveStream}
                 onRecordingSaved={handleRecordingSaved}
+                onOpenVideoEditor={handleOpenVideoEditor}
               />
             )}
 
@@ -249,6 +299,7 @@ export default function App() {
                 onPlayRecording={(rec) => setPlayingRecording(rec)}
                 onDeleteRecording={handleDeleteRecording}
                 onStartLive={() => setIsCreateLiveOpen(true)}
+                onOpenVideoEditor={handleOpenVideoEditor}
               />
             )}
 
@@ -300,6 +351,16 @@ export default function App() {
         video={playingRecording}
         onClose={() => setPlayingRecording(null)}
         onViewChannel={handleViewChannel}
+        onOpenEditor={handleOpenVideoEditor}
+      />
+
+      {/* Video Editor & Trimming Modal */}
+      <VideoEditorModal
+        isOpen={isEditorOpen}
+        onClose={() => setIsEditorOpen(false)}
+        video={editingRecording}
+        onSaveToProfile={handleSaveEditedRecording}
+        onDownloadToDevice={handleDownloadVideo}
       />
 
       {/* Admin Passcode Gate (Prevents any automatic or accidental entry) */}

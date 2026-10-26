@@ -1,17 +1,19 @@
 import React, { useState } from 'react';
-import { X, Play, Download, Sparkles, Clock, Eye, Calendar, Share2, Check, Radio } from 'lucide-react';
+import { X, Play, Download, Sparkles, Clock, Eye, Calendar, Share2, Check, Radio, Scissors } from 'lucide-react';
 import { RecordedVideo } from '../types';
 
 interface VideoPlayerModalProps {
   video: RecordedVideo | null;
   onClose: () => void;
   onViewChannel?: (creatorId: string) => void;
+  onOpenEditor?: (video: RecordedVideo) => void;
 }
 
 export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
   video,
   onClose,
   onViewChannel,
+  onOpenEditor,
 }) => {
   const [copied, setCopied] = useState(false);
 
@@ -97,6 +99,20 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
             </div>
 
             <div className="flex items-center gap-2">
+              {onOpenEditor && (
+                <button
+                  onClick={() => {
+                    onOpenEditor(video);
+                    onClose();
+                  }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 text-white rounded-xl font-bold transition shadow cursor-pointer"
+                  title="Modifier la vidéo ou supprimer des instants précis"
+                >
+                  <Scissors className="w-3.5 h-3.5" />
+                  <span>Modifier & Couper</span>
+                </button>
+              )}
+
               {video.videoUrl && (
                 <a
                   href={video.videoUrl}

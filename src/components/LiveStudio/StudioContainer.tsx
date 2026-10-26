@@ -43,6 +43,7 @@ interface StudioContainerProps {
   onUpdateStream: (updated: Partial<LiveStream>) => void;
   onEndLiveStream: () => void;
   onRecordingSaved: (video: RecordedVideo) => void;
+  onOpenVideoEditor?: (video: RecordedVideo) => void;
 }
 
 export const StudioContainer: React.FC<StudioContainerProps> = ({
@@ -52,6 +53,7 @@ export const StudioContainer: React.FC<StudioContainerProps> = ({
   onUpdateStream,
   onEndLiveStream,
   onRecordingSaved,
+  onOpenVideoEditor,
 }) => {
   // Safe effective stream if empty
   const currentStream: LiveStream = activeStream || {
@@ -489,6 +491,7 @@ export const StudioContainer: React.FC<StudioContainerProps> = ({
             }}
             sponsorVideoUrl={currentStream.sponsorVideoUrl}
             sponsorVideoTitle={currentStream.sponsorVideoTitle}
+            onOpenVideoEditor={onOpenVideoEditor}
           />
 
           {/* Source Switcher Quick Bar */}

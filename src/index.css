@@ -49,20 +49,21 @@
   object-fit: cover;
 }
 
-/* TV Broadcast Ticker Marquee Animation */
+/* TV Broadcast Ticker Marquee Animation - Starts immediately visible at 0% */
 @keyframes tv-ticker-scroll {
   0% {
-    transform: translateX(100%);
+    transform: translateX(0%);
   }
   100% {
-    transform: translateX(-100%);
+    transform: translateX(-50%);
   }
 }
 
 .animate-tv-ticker {
-  display: inline-block;
+  display: flex;
+  width: max-content;
   white-space: nowrap;
-  animation: tv-ticker-scroll 24s linear infinite;
+  animation: tv-ticker-scroll 22s linear infinite;
   will-change: transform;
 }
 
