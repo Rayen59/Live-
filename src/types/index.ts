@@ -101,14 +101,12 @@ export interface LiveStream {
   parallelMediaMode?: 'pip' | 'split' | null;
   adSoloCountdown?: number; // Countdown when ad is broadcasting solo
   adAutoReturnTargetSource?: VideoSourceType; // Source to return to automatically
-}
-
-export interface DevicePairingSession {
-  code: string;
-  hostUserId: string;
-  streamId?: string;
-  deviceRole: 'remote_control' | 'mobile_camera' | 'interactive_viewer';
-  lastPing: string;
+  aspectRatio?: '16:9' | '9:16'; // 16:9 (Desktop) or 9:16 (Format Smartphone)
+  cameraFacingMode?: 'user' | 'environment'; // Caméra avant (selfie) ou arrière
+  isTickerActive?: boolean; // TV crawling news ticker running or paused/stopped
+  tickerSpeed?: 'normal' | 'slow' | 'fast'; // TV ticker speed
+  sponsorVideoUrl?: string; // Pre-selected sponsor / marketing video from gallery
+  sponsorVideoTitle?: string;
 }
 
 export interface RecordedVideo {

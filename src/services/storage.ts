@@ -86,30 +86,6 @@ export const StorageService = {
     }
   },
 
-  // Pair PC and Mobile with a 6-digit sync code
-  async createPairing(hostUserId: string, streamId?: string, deviceRole: 'remote_control' | 'mobile_camera' | 'interactive_viewer' = 'remote_control'): Promise<{ success: boolean; code?: string; session?: any }> {
-    try {
-      const res = await fetch('/api/sync/pair', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ hostUserId, streamId, deviceRole }),
-      });
-      if (res.ok) return await res.json();
-    } catch {}
-    const fallbackCode = Math.floor(100000 + Math.random() * 900000).toString();
-    return { success: true, code: fallbackCode };
-  },
-
-  async getPairing(code: string): Promise<{ success: boolean; session?: any; error?: string }> {
-    try {
-      const res = await fetch(`/api/sync/pair/${encodeURIComponent(code)}`);
-      if (res.ok) return await res.json();
-      return { success: false, error: 'Code de liaison non trouvé.' };
-    } catch {
-      return { success: false, error: 'Erreur réseau de liaison.' };
-    }
-  },
-
   getUsers(): User[] {
     const raw = localStorage.getItem(USERS_KEY);
     if (!raw) {

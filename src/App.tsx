@@ -8,9 +8,9 @@ import { AdminDashboard } from './components/Admin/AdminDashboard';
 import { AuthModal } from './components/AuthModal';
 import { CreateLiveModal } from './components/CreateLiveModal';
 import { VideoPlayerModal } from './components/VideoPlayerModal';
-import { DevicePairingModal } from './components/DevicePairingModal';
 import { AdminAccessModal } from './components/Admin/AdminAccessModal';
 import { EntranceGate } from './components/EntranceGate';
+import { SearchPage } from './components/Search/SearchPage';
 import { StorageService } from './services/storage';
 import { User, LiveStream, RecordedVideo } from './types';
 import { CheckCircle2 } from 'lucide-react';
@@ -23,7 +23,7 @@ export default function App() {
   const [allRecordings, setAllRecordings] = useState<RecordedVideo[]>(StorageService.getRecordings());
 
   // Navigation State: Never starts or automatically routes to admin
-  const [activeTab, setActiveTab] = useState<'feed' | 'studio' | 'channel' | 'admin'>('feed');
+  const [activeTab, setActiveTab] = useState<'feed' | 'studio' | 'channel' | 'admin' | 'search'>('feed');
   const [activeViewingStream, setActiveViewingStream] = useState<LiveStream | null>(null);
   const [selectedChannelUser, setSelectedChannelUser] = useState<User | null>(currentUser);
   const [playingRecording, setPlayingRecording] = useState<RecordedVideo | null>(null);
@@ -34,7 +34,6 @@ export default function App() {
   // Modals
   const [isAuthOpen, setIsAuthOpen] = useState(false);
   const [isCreateLiveOpen, setIsCreateLiveOpen] = useState(false);
-  const [isPairingOpen, setIsPairingOpen] = useState(false);
   const [isAdminAccessModalOpen, setIsAdminAccessModalOpen] = useState(false);
   const [notificationToast, setNotificationToast] = useState<string | null>(null);
 
@@ -47,18 +46,7 @@ export default function App() {
       if (Array.isArray(data.recordings)) setAllRecordings(data.recordings);
     });
 
-    // Check URL parameters for companion mobile pairing (e.g. ?pair=123456)
-    const params = new URLSearchParams(window.location.search);
-    const pairCode = params.get('pair');
-    if (pairCode) {
-      StorageService.getPairing(pairCode).then((res) => {
-        if (res.success && res.session) {
-          showToast(`Liaison smartphone active avec le studio (Code: ${pairCode}) !`);
-        }
-      });
-    }
-
-    // Subscribe to server-sent events for instant sync between PC and phone
+    // Subscribe to server-sent events for instant sync across devices
     const unsubscribe = StorageService.subscribeToSyncEvents((event) => {
       if (event.type === 'stream_updated' && event.data) {
         setAllStreams((prev) => {
@@ -199,7 +187,6 @@ export default function App() {
         }}
         onOpenAuth={() => setIsAuthOpen(true)}
         onOpenNewLiveModal={() => setIsCreateLiveOpen(true)}
-        onOpenPairingModal={() => setIsPairingOpen(true)}
         onRequestAdminAccess={() => setIsAdminAccessModalOpen(true)}
         searchQuery={searchQuery}
         setSearchQuery={setSearchQuery}
@@ -265,6 +252,19 @@ export default function App() {
               />
             )}
 
+            {activeTab === 'search' && (
+              <SearchPage
+                initialQuery={searchQuery}
+                streams={allStreams}
+                recordings={allRecordings}
+                users={allUsers}
+                onSelectStream={(st) => setActiveViewingStream(st)}
+                onPlayRecording={(rec) => setPlayingRecording(rec)}
+                onViewChannel={handleViewChannel}
+                onBackToFeed={() => setActiveTab('feed')}
+              />
+            )}
+
             {activeTab === 'admin' && (
               <AdminDashboard
                 currentUser={currentUser}
@@ -300,14 +300,6 @@ export default function App() {
         video={playingRecording}
         onClose={() => setPlayingRecording(null)}
         onViewChannel={handleViewChannel}
-      />
-
-      {/* Real-Time PC & Mobile Liaison Modal */}
-      <DevicePairingModal
-        isOpen={isPairingOpen}
-        onClose={() => setIsPairingOpen(false)}
-        currentUser={currentUser}
-        activeStream={allStreams[0]}
       />
 
       {/* Admin Passcode Gate (Prevents any automatic or accidental entry) */}

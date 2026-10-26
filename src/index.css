@@ -48,3 +48,29 @@
   height: 100%;
   object-fit: cover;
 }
+
+/* TV Broadcast Ticker Marquee Animation */
+@keyframes tv-ticker-scroll {
+  0% {
+    transform: translateX(100%);
+  }
+  100% {
+    transform: translateX(-100%);
+  }
+}
+
+.animate-tv-ticker {
+  display: inline-block;
+  white-space: nowrap;
+  animation: tv-ticker-scroll 24s linear infinite;
+  will-change: transform;
+}
+
+.animate-tv-ticker:hover {
+  animation-play-state: paused;
+}
+
+.animate-tv-ticker-paused {
+  animation-play-state: paused !important;
+}
+

@@ -12,7 +12,10 @@ import {
   Layers, 
   VideoOff, 
   CheckCircle2,
-  Mic
+  Mic,
+  Smartphone,
+  RefreshCw,
+  Camera
 } from 'lucide-react';
 import { VideoFilterSettings, VideoSourceType, MediaAsset, MicRequest, RecordedVideo } from '../../types';
 import { StorageService } from '../../services/storage';
@@ -36,6 +39,13 @@ interface VideoOutputCanvasProps {
   lowerThirdSubtitle?: string;
   viewerCount: number;
   onRecordingSaved?: (video: RecordedVideo) => void;
+  aspectRatio?: '16:9' | '9:16';
+  cameraFacingMode?: 'user' | 'environment';
+  isTickerActive?: boolean;
+  onToggleTicker?: () => void;
+  onLaunchSponsorVideo?: (url: string, title?: string) => void;
+  sponsorVideoUrl?: string;
+  sponsorVideoTitle?: string;
 }
 
 export const VideoOutputCanvas: React.FC<VideoOutputCanvasProps> = ({
@@ -57,6 +67,13 @@ export const VideoOutputCanvas: React.FC<VideoOutputCanvasProps> = ({
   lowerThirdSubtitle,
   viewerCount,
   onRecordingSaved,
+  aspectRatio = '16:9',
+  cameraFacingMode = 'user',
+  isTickerActive = true,
+  onToggleTicker,
+  onLaunchSponsorVideo,
+  sponsorVideoUrl,
+  sponsorVideoTitle,
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const mediaAssetVideoRef = useRef<HTMLVideoElement>(null);
@@ -67,8 +84,15 @@ export const VideoOutputCanvas: React.FC<VideoOutputCanvasProps> = ({
   const [liveCaptionText, setLiveCaptionText] = useState<string>('Bienvenue sur le direct ! Posez vos questions dans le chat ou levez la main pour parler.');
   const [isPipMuted, setIsPipMuted] = useState(false);
   const [soloRemainingSeconds, setSoloRemainingSeconds] = useState<number>(0);
+  const [facingMode, setFacingMode] = useState<'user' | 'environment'>(cameraFacingMode);
+  const [canvasFormat, setCanvasFormat] = useState<'16:9' | '9:16'>(aspectRatio);
+  const [isTickerRunning, setIsTickerRunning] = useState(isTickerActive);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordedChunksRef = useRef<Blob[]>([]);
+
+  const handleToggleFacingMode = () => {
+    setFacingMode((prev) => (prev === 'user' ? 'environment' : 'user'));
+  };
 
   // Automatic countdown & auto-return to live camera when broadcasting media solo
   useEffect(() => {
@@ -109,12 +133,13 @@ export const VideoOutputCanvas: React.FC<VideoOutputCanvasProps> = ({
       if (activeSource === 'camera') {
         try {
           setCameraError(null);
-          // Request camera & mic
+          const isPortrait = canvasFormat === '9:16';
+          // Request camera & mic with facingMode (Front/Back)
           const stream = await navigator.mediaDevices.getUserMedia({
             video: {
-              width: { ideal: filterSettings.resolution === '1080p' ? 1920 : filterSettings.resolution === '720p' ? 1280 : 854 },
-              height: { ideal: filterSettings.resolution === '1080p' ? 1080 : filterSettings.resolution === '720p' ? 720 : 480 },
-              facingMode: 'user',
+              width: { ideal: isPortrait ? 1080 : filterSettings.resolution === '1080p' ? 1920 : 1280 },
+              height: { ideal: isPortrait ? 1920 : filterSettings.resolution === '1080p' ? 1080 : 720 },
+              facingMode: facingMode,
             },
             audio: true,
           });
@@ -157,7 +182,7 @@ export const VideoOutputCanvas: React.FC<VideoOutputCanvasProps> = ({
         currentStream.getTracks().forEach((track) => track.stop());
       }
     };
-  }, [activeSource, filterSettings.resolution]);
+  }, [activeSource, filterSettings.resolution, facingMode, canvasFormat]);
 
   // Handle Recording start / stop
   useEffect(() => {
@@ -253,8 +278,35 @@ export const VideoOutputCanvas: React.FC<VideoOutputCanvasProps> = ({
           </span>
         </div>
 
-        {/* Recording Controller */}
-        <div className="flex items-center gap-2">
+        {/* Camera Flip, Format Switcher & Recording Controller */}
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Flip Front/Back Camera for Mobile */}
+          {activeSource === 'camera' && (
+            <button
+              onClick={handleToggleFacingMode}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/30 text-rose-300 rounded-xl text-xs font-semibold transition cursor-pointer active:scale-95 shadow-sm"
+              title="Basculer caméra avant (selfie) / arrière"
+            >
+              <RefreshCw className="w-3.5 h-3.5 text-rose-400" />
+              <span className="hidden sm:inline">Caméra:</span>
+              <span>{facingMode === 'user' ? 'Avant 🤳' : 'Arrière 📸'}</span>
+            </button>
+          )}
+
+          {/* Format Switcher (Mobile 9:16 vs Desktop 16:9) */}
+          <button
+            onClick={() => setCanvasFormat((prev) => (prev === '16:9' ? '9:16' : '16:9'))}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-semibold transition cursor-pointer ${
+              canvasFormat === '9:16'
+                ? 'bg-purple-600/25 border-purple-500 text-purple-200'
+                : 'bg-zinc-800 border-zinc-700 text-zinc-300 hover:text-white'
+            }`}
+            title="Changer de format d'affichage (Smartphone 9:16 / Écran 16:9)"
+          >
+            <Smartphone className="w-3.5 h-3.5 text-purple-400" />
+            <span>{canvasFormat === '9:16' ? '📱 Mobile 9:16' : '💻 Paysage 16:9'}</span>
+          </button>
+
           {isRecording ? (
             <div className="flex items-center gap-2 bg-rose-950/60 border border-rose-500/50 px-3 py-1 rounded-xl text-rose-200">
               <CircleDot className="w-3.5 h-3.5 text-rose-500 animate-ping" />
@@ -292,7 +344,11 @@ export const VideoOutputCanvas: React.FC<VideoOutputCanvasProps> = ({
       {/* Main Broadcast Screen Area */}
       <div
         ref={containerRef}
-        className="relative aspect-video w-full bg-zinc-950 rounded-2xl overflow-hidden border border-zinc-800 shadow-2xl flex items-center justify-center group select-none"
+        className={`relative ${
+          canvasFormat === '9:16'
+            ? 'w-full max-w-sm mx-auto aspect-[9/16] min-h-[540px] max-h-[640px] rounded-3xl'
+            : 'aspect-video w-full rounded-2xl'
+        } bg-zinc-950 overflow-hidden border border-zinc-800 shadow-2xl flex items-center justify-center group select-none transition-all duration-300`}
       >
         {/* Source: Camera or Screen */}
         {(activeSource === 'camera' || activeSource === 'screen') && (
@@ -485,6 +541,16 @@ export const VideoOutputCanvas: React.FC<VideoOutputCanvasProps> = ({
             <Eye className="w-3 h-3 text-rose-400" />
             <span>{viewerCount}</span>
           </div>
+          {activeSource === 'camera' && (
+            <button
+              onClick={handleToggleFacingMode}
+              className="flex items-center gap-1 bg-black/70 hover:bg-black/90 active:scale-90 backdrop-blur-md text-white text-[11px] font-semibold px-2 py-1 rounded-lg border border-white/20 transition cursor-pointer shadow-lg"
+              title="Inverser caméra téléphone (Avant / Arrière)"
+            >
+              <RefreshCw className="w-3 h-3 text-rose-400" />
+              <span>{facingMode === 'user' ? 'Cam Avant' : 'Cam Arrière'}</span>
+            </button>
+          )}
         </div>
 
         {/* Guest Speaker Microphone Floating Box (when host opens a viewer's mic) */}
@@ -539,19 +605,52 @@ export const VideoOutputCanvas: React.FC<VideoOutputCanvasProps> = ({
           </div>
         )}
 
-        {/* Bottom Ticker News Banner */}
-        <div className="absolute bottom-0 inset-x-0 bg-gradient-to-r from-rose-950/90 via-zinc-950/90 to-zinc-950/90 border-t border-rose-500/30 py-1.5 px-4 flex items-center justify-between text-xs text-zinc-200 z-20 backdrop-blur-sm">
-          <div className="flex items-center gap-2 overflow-hidden whitespace-nowrap">
-            <span className="px-1.5 py-0.5 bg-rose-600 text-white font-extrabold text-[9px] uppercase tracking-wider rounded">
-              INFO
-            </span>
-            <span className="truncate font-medium">{bannerTickerText}</span>
+        {/* AUTOMATED TV-STYLE NEWS TICKER MARQUEE (Bandeau d'information défilant type Télévision) */}
+        <div className="absolute bottom-0 inset-x-0 h-8 sm:h-9 bg-zinc-950/95 backdrop-blur-md border-t border-rose-500/40 flex items-center justify-between text-xs text-zinc-100 z-20 shadow-2xl overflow-hidden select-none">
+          {/* TV Label Badge (Static on the left, like TV channels) */}
+          <div className="flex items-center gap-1 px-3 py-1 bg-gradient-to-r from-red-600 to-rose-600 text-white font-extrabold text-[10px] uppercase tracking-wider shrink-0 z-30 shadow-md">
+            <span className="w-2 h-2 rounded-full bg-white animate-pulse" />
+            <span>TV LIVE</span>
           </div>
 
-          <div className="flex items-center gap-2 shrink-0">
+          {/* Scrolling Marquee Container */}
+          <div className="flex-1 overflow-hidden relative h-full flex items-center px-3">
+            <div
+              className={`whitespace-nowrap font-medium text-[11px] sm:text-xs text-zinc-200 tracking-wide ${
+                isTickerRunning ? 'animate-tv-ticker' : ''
+              }`}
+            >
+              <span>{bannerTickerText}</span>
+              <span className="mx-6 text-rose-500 font-bold">•</span>
+              <span className="text-zinc-400">Diffusion StreamPulse Studio</span>
+              <span className="mx-6 text-rose-500 font-bold">•</span>
+              <span className="text-rose-400 font-semibold">{streamTitle}</span>
+              <span className="mx-6 text-rose-500 font-bold">•</span>
+              <span>{bannerTickerText}</span>
+            </div>
+          </div>
+
+          {/* Right Action Controls: Admin Ticker Toggle & Fullscreen */}
+          <div className="flex items-center gap-1 px-2.5 bg-zinc-950/95 z-30 border-l border-zinc-800 shrink-0">
+            <button
+              onClick={() => {
+                const next = !isTickerRunning;
+                setIsTickerRunning(next);
+                if (onToggleTicker) onToggleTicker();
+              }}
+              className={`px-2 py-0.5 rounded text-[10px] font-bold transition cursor-pointer flex items-center gap-1 ${
+                isTickerRunning
+                  ? 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700 hover:text-white'
+                  : 'bg-amber-600 text-white hover:bg-amber-500'
+              }`}
+              title={isTickerRunning ? "Stopper le défilement du bandeau" : "Relancer le défilement du bandeau"}
+            >
+              <span>{isTickerRunning ? '⏸ Stopper' : '▶ Animer'}</span>
+            </button>
+
             <button
               onClick={toggleFullscreen}
-              className="p-1 rounded hover:bg-white/10 text-zinc-300 hover:text-white transition"
+              className="p-1 rounded hover:bg-white/10 text-zinc-400 hover:text-white transition cursor-pointer"
               title="Plein écran"
             >
               <Maximize className="w-3.5 h-3.5" />

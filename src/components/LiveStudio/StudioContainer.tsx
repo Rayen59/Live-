@@ -14,8 +14,7 @@ import {
   CircleDot, 
   Play, 
   Square,
-  HelpCircle,
-  Smartphone
+  HelpCircle
 } from 'lucide-react';
 import { 
   User, 
@@ -35,7 +34,6 @@ import { MicRequestsManager } from './MicRequestsManager';
 import { AICopilotPanel } from './AICopilotPanel';
 import { LiveChat } from '../Chat/LiveChat';
 import { ModerationModal } from '../Chat/ModerationModal';
-import { DevicePairingModal } from '../DevicePairingModal';
 import { StorageService } from '../../services/storage';
 
 interface StudioContainerProps {
@@ -93,7 +91,6 @@ export const StudioContainer: React.FC<StudioContainerProps> = ({
   const [mediaAssets, setMediaAssets] = useState<MediaAsset[]>(StorageService.getMediaAssets());
   const [activeMediaId, setActiveMediaId] = useState<string | undefined>(currentStream.currentMediaId);
   const [parallelMediaId, setParallelMediaId] = useState<string | undefined>(currentStream.parallelMediaId);
-  const [isPairingModalOpen, setIsPairingModalOpen] = useState(false);
 
   // Mic Requests & On-air guest speakers
   const [micRequests, setMicRequests] = useState<MicRequest[]>([]);
@@ -106,6 +103,7 @@ export const StudioContainer: React.FC<StudioContainerProps> = ({
   const [lowerThirdTitle, setLowerThirdTitle] = useState(currentStream.lowerThirdTitle || currentStream.title);
   const [lowerThirdSubtitle, setLowerThirdSubtitle] = useState(currentStream.lowerThirdSubtitle || `${currentUser.name} · En direct`);
   const [bannerTickerText, setBannerTickerText] = useState(currentStream.activeBannerText || '🔴 DIRECT STREAMING · Posez vos questions et demandez la parole !');
+  const [isTickerActive, setIsTickerActive] = useState(currentStream.isTickerActive !== false);
   const [isEditingOverlays, setIsEditingOverlays] = useState(false);
 
   // Recording state
@@ -270,14 +268,6 @@ export const StudioContainer: React.FC<StudioContainerProps> = ({
         {/* End Stream, Mobile Liaison & Settings */}
         <div className="flex items-center gap-2">
           <button
-            onClick={() => setIsPairingModalOpen(true)}
-            className="flex items-center gap-1.5 px-3 py-2 bg-gradient-to-r from-rose-600/30 to-purple-600/30 hover:from-rose-600/50 hover:to-purple-600/50 text-white text-xs font-semibold rounded-xl border border-rose-500/40 transition cursor-pointer shadow"
-          >
-            <Smartphone className="w-3.5 h-3.5 text-rose-400 animate-pulse" />
-            <span>Liaison Mobile & Télécommande</span>
-          </button>
-
-          <button
             onClick={() => setIsEditingOverlays(!isEditingOverlays)}
             className="flex items-center gap-1.5 px-3 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-semibold rounded-xl border border-zinc-700 transition cursor-pointer"
           >
@@ -295,43 +285,66 @@ export const StudioContainer: React.FC<StudioContainerProps> = ({
         </div>
       </div>
 
-      {/* Overlay Text Customizer Drawer */}
+      {/* Overlay & TV Ticker Customizer Drawer */}
       {isEditingOverlays && (
-        <div className="p-4 bg-zinc-900 border border-zinc-800 rounded-2xl grid grid-cols-1 sm:grid-cols-3 gap-3 animate-in fade-in text-xs">
-          <div>
-            <label className="block text-zinc-300 font-medium mb-1">
-              Titre Bandeau Inférieur (Lower-Third)
-            </label>
-            <input
-              type="text"
-              value={lowerThirdTitle}
-              onChange={(e) => setLowerThirdTitle(e.target.value)}
-              className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-2 text-white"
-            />
+        <div className="p-4 bg-zinc-900 border border-zinc-800 rounded-2xl space-y-3 animate-in fade-in text-xs">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-zinc-300 font-medium mb-1">
+                Titre Bandeau Inférieur (Lower-Third)
+              </label>
+              <input
+                type="text"
+                value={lowerThirdTitle}
+                onChange={(e) => setLowerThirdTitle(e.target.value)}
+                className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-2 text-white"
+              />
+            </div>
+
+            <div>
+              <label className="block text-zinc-300 font-medium mb-1">
+                Sous-titre / Fonction
+              </label>
+              <input
+                type="text"
+                value={lowerThirdSubtitle}
+                onChange={(e) => setLowerThirdSubtitle(e.target.value)}
+                className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-2 text-white"
+              />
+            </div>
           </div>
 
-          <div>
-            <label className="block text-zinc-300 font-medium mb-1">
-              Sous-titre / Fonction
-            </label>
-            <input
-              type="text"
-              value={lowerThirdSubtitle}
-              onChange={(e) => setLowerThirdSubtitle(e.target.value)}
-              className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-2 text-white"
-            />
-          </div>
+          {/* TV Automated Scrolling Ticker (Bandeau défilant télé) */}
+          <div className="pt-2 border-t border-zinc-800">
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-zinc-200 font-bold flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                <span>Bandeau Défilant TV Automatique (Ticker en bas du Live)</span>
+              </label>
+              <button
+                type="button"
+                onClick={() => {
+                  const next = !isTickerActive;
+                  setIsTickerActive(next);
+                  onUpdateStream({ isTickerActive: next });
+                }}
+                className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition cursor-pointer flex items-center gap-1 ${
+                  isTickerActive
+                    ? 'bg-rose-600 hover:bg-rose-500 text-white'
+                    : 'bg-zinc-800 text-zinc-400 hover:text-white'
+                }`}
+              >
+                <span>{isTickerActive ? 'Bandeau Actif (Défile)' : 'Bandeau Arrêté / Masqué'}</span>
+              </button>
+            </div>
 
-          <div>
-            <label className="block text-zinc-300 font-medium mb-1">
-              Texte Défilant Bas d'Écran (Ticker Info)
-            </label>
             <div className="flex gap-2">
               <input
                 type="text"
                 value={bannerTickerText}
                 onChange={(e) => setBannerTickerText(e.target.value)}
-                className="flex-1 bg-zinc-950 border border-zinc-800 rounded-xl p-2 text-white"
+                placeholder="Écrivez le message défilant sur la bande télé..."
+                className="flex-1 bg-zinc-950 border border-zinc-800 rounded-xl p-2.5 text-white placeholder:text-zinc-500 text-xs focus:outline-none focus:border-rose-500"
               />
               <button
                 onClick={() => {
@@ -339,12 +352,46 @@ export const StudioContainer: React.FC<StudioContainerProps> = ({
                     lowerThirdTitle,
                     lowerThirdSubtitle,
                     activeBannerText: bannerTickerText,
+                    isTickerActive,
                   });
                   setIsEditingOverlays(false);
                 }}
-                className="px-3 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-xl font-bold"
+                className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-xl font-bold cursor-pointer transition shrink-0"
               >
-                Appliquer
+                Appliquer sur le live
+              </button>
+            </div>
+
+            {/* Quick TV Presets */}
+            <div className="flex items-center gap-1.5 mt-2 flex-wrap text-[11px]">
+              <span className="text-zinc-500 font-semibold uppercase text-[10px]">Exemples rapides :</span>
+              <button
+                type="button"
+                onClick={() => setBannerTickerText('🔴 FLASH INFO : Direct exceptionnel · Posez vos questions dans le chat ou levez la main !')}
+                className="px-2 py-0.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 cursor-pointer"
+              >
+                Info live
+              </button>
+              <button
+                type="button"
+                onClick={() => setBannerTickerText('📢 SPONSORING : Ce direct est sponsorisé par notre partenaire · Offre spéciale abonnés !')}
+                className="px-2 py-0.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-amber-300 cursor-pointer"
+              >
+                Sponsor & Pub
+              </button>
+              <button
+                type="button"
+                onClick={() => setBannerTickerText('🎙️ MICRO OUVERT : Spectateurs, demandez la parole pour intervenir en direct audio !')}
+                className="px-2 py-0.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-emerald-300 cursor-pointer"
+              >
+                Micro ouvert
+              </button>
+              <button
+                type="button"
+                onClick={() => setBannerTickerText('⭐ REMERCIEMENTS : Merci pour vos partages, vos likes et vos abonnements !')}
+                className="px-2 py-0.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-rose-300 cursor-pointer"
+              >
+                Remerciements
               </button>
             </div>
           </div>
@@ -355,6 +402,63 @@ export const StudioContainer: React.FC<StudioContainerProps> = ({
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
         {/* Left Column: Broadcast Program Output & Controls Rack (8 cols) */}
         <div className="lg:col-span-8 space-y-4">
+          {/* Quick Sponsor Broadcast Action Bar (if sponsor clip configured or uploaded) */}
+          {(currentStream.sponsorVideoUrl || mediaAssets.some((m) => m.isAd)) && (
+            <div className="p-2.5 bg-gradient-to-r from-amber-950/40 via-zinc-900 to-zinc-900 border border-amber-500/30 rounded-2xl flex items-center justify-between gap-3 text-xs">
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse shrink-0" />
+                <span className="font-semibold text-amber-200 truncate">
+                  Vidéo Sponsoring / Marketing disponible :
+                </span>
+                <span className="text-zinc-300 truncate hidden sm:inline">
+                  {currentStream.sponsorVideoTitle || 'Clip Sponsoring Partenaire'}
+                </span>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  onClick={() => {
+                    const url = currentStream.sponsorVideoUrl || mediaAssets.find((m) => m.isAd)?.url;
+                    if (url) {
+                      const asset: MediaAsset = {
+                        id: `sponsor_clip_${Date.now()}`,
+                        name: currentStream.sponsorVideoTitle || 'Clip Sponsoring',
+                        type: 'video',
+                        url: url,
+                        duration: 15,
+                        isAd: true,
+                      };
+                      handleSelectMediaSolo(asset, 15);
+                    }
+                  }}
+                  className="px-3 py-1 bg-amber-600 hover:bg-amber-500 text-white font-bold rounded-lg shadow transition cursor-pointer"
+                  title="Diffuser en plein écran avec retour caméra automatique"
+                >
+                  Diffuser Solo (15s)
+                </button>
+                <button
+                  onClick={() => {
+                    const url = currentStream.sponsorVideoUrl || mediaAssets.find((m) => m.isAd)?.url;
+                    if (url) {
+                      const asset: MediaAsset = {
+                        id: `sponsor_clip_${Date.now()}`,
+                        name: currentStream.sponsorVideoTitle || 'Clip Sponsoring',
+                        type: 'video',
+                        url: url,
+                        duration: 15,
+                        isAd: true,
+                      };
+                      handleSelectMediaParallel(asset);
+                    }
+                  }}
+                  className="px-3 py-1 bg-purple-600 hover:bg-purple-500 text-white font-bold rounded-lg shadow transition cursor-pointer"
+                  title="Diffuser en encart Picture-in-Picture tout en gardant votre caméra"
+                >
+                  Encart PiP
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Real-time Program Canvas */}
           <VideoOutputCanvas
             streamTitle={currentStream.title}
@@ -375,6 +479,16 @@ export const StudioContainer: React.FC<StudioContainerProps> = ({
             lowerThirdSubtitle={lowerThirdSubtitle}
             viewerCount={currentStream.viewerCount}
             onRecordingSaved={onRecordingSaved}
+            aspectRatio={currentStream.aspectRatio}
+            cameraFacingMode={currentStream.cameraFacingMode}
+            isTickerActive={isTickerActive}
+            onToggleTicker={() => {
+              const next = !isTickerActive;
+              setIsTickerActive(next);
+              onUpdateStream({ isTickerActive: next });
+            }}
+            sponsorVideoUrl={currentStream.sponsorVideoUrl}
+            sponsorVideoTitle={currentStream.sponsorVideoTitle}
           />
 
           {/* Source Switcher Quick Bar */}
@@ -519,14 +633,6 @@ export const StudioContainer: React.FC<StudioContainerProps> = ({
         currentUser={currentUser}
         allUsers={allUsers}
         onBanUser={handleBanUser}
-      />
-
-      {/* Real-time PC & Mobile Liaison Modal */}
-      <DevicePairingModal
-        isOpen={isPairingModalOpen}
-        onClose={() => setIsPairingModalOpen(false)}
-        currentUser={currentUser}
-        activeStream={currentStream}
       />
     </div>
   );
