@@ -22,7 +22,6 @@ interface NavbarProps {
   setActiveTab: (tab: 'feed' | 'studio' | 'channel' | 'admin' | 'search') => void;
   onOpenAuth: () => void;
   onOpenNewLiveModal: () => void;
-  onRequestAdminAccess: () => void;
   searchQuery: string;
   setSearchQuery: (query: string) => void;
   onSwitchUser: (user: User) => void;
@@ -39,7 +38,6 @@ export const Navbar: React.FC<NavbarProps> = ({
   setActiveTab,
   onOpenAuth,
   onOpenNewLiveModal,
-  onRequestAdminAccess,
   searchQuery,
   setSearchQuery,
   onSwitchUser,
@@ -128,23 +126,6 @@ export const Navbar: React.FC<NavbarProps> = ({
             >
               <Film className="w-3.5 h-3.5" />
               <span>Ma Chaîne</span>
-            </button>
-            <button
-              onClick={() => {
-                if (currentUser.role === 'admin') {
-                  setActiveTab('admin');
-                } else {
-                  onRequestAdminAccess();
-                }
-              }}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition cursor-pointer ${
-                activeTab === 'admin'
-                  ? 'bg-amber-500/15 text-amber-300 border border-amber-500/30 font-semibold'
-                  : 'text-zinc-400 hover:text-white hover:bg-zinc-900'
-              }`}
-            >
-              <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
-              <span>Admin</span>
             </button>
           </nav>
         </div>
@@ -302,20 +283,6 @@ export const Navbar: React.FC<NavbarProps> = ({
                   <span>Régie Studio Live</span>
                 </button>
 
-                <button
-                  onClick={() => {
-                    if (currentUser.role === 'admin') {
-                      setActiveTab('admin');
-                    } else {
-                      onRequestAdminAccess();
-                    }
-                  }}
-                  className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-zinc-300 hover:text-white hover:bg-zinc-800/80 rounded-lg transition"
-                >
-                  <ShieldCheck className="w-4 h-4 text-amber-400" />
-                  <span>Espace Administrateur</span>
-                </button>
-
                 {/* Quick Account Switcher */}
                 <div className="mt-2 pt-2 border-t border-zinc-800/80">
                   <p className="px-3 text-[11px] font-semibold text-zinc-500 uppercase tracking-wider mb-1.5">
@@ -398,18 +365,6 @@ export const Navbar: React.FC<NavbarProps> = ({
         >
           <Film className="w-3.5 h-3.5" />
           <span>Chaîne</span>
-        </button>
-        <button
-          onClick={() => {
-            if (currentUser.role === 'admin') setActiveTab('admin');
-            else onRequestAdminAccess();
-          }}
-          className={`flex items-center gap-1.5 py-1 px-3 rounded-lg font-medium transition ${
-            activeTab === 'admin' ? 'bg-amber-500/20 text-amber-300 font-bold' : 'text-zinc-400'
-          }`}
-        >
-          <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
-          <span>Admin</span>
         </button>
       </div>
     </header>

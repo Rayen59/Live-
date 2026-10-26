@@ -44,21 +44,25 @@ export const MediaAdManager: React.FC<MediaAdManagerProps> = ({
       return;
     }
 
-    const objectUrl = URL.createObjectURL(file);
-    const newAsset: MediaAsset = {
-      id: `custom_media_${Date.now()}`,
-      name: file.name.replace(/\.[^/.]+$/, ''),
-      type: isVideo ? 'video' : 'image',
-      url: objectUrl,
-      duration: isVideo ? 30 : undefined,
-      thumbnail: isImage ? objectUrl : undefined,
-      isAd: file.name.toLowerCase().includes('pub') || file.name.toLowerCase().includes('ad'),
-    };
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = reader.result as string;
+      const newAsset: MediaAsset = {
+        id: `custom_media_${Date.now()}`,
+        name: file.name.replace(/\.[^/.]+$/, ''),
+        type: isVideo ? 'video' : 'image',
+        url: dataUrl,
+        duration: isVideo ? 15 : undefined,
+        thumbnail: isImage ? dataUrl : undefined,
+        isAd: true,
+      };
 
-    StorageService.addMediaAsset(newAsset);
-    setMediaAssets((prev) => [newAsset, ...prev]);
-    setUploadNotice(`Média "${file.name}" ajouté avec succès à votre galerie !`);
-    setTimeout(() => setUploadNotice(null), 3000);
+      StorageService.addMediaAsset(newAsset);
+      setMediaAssets((prev) => [newAsset, ...prev]);
+      setUploadNotice(`Média "${file.name}" ajouté avec succès à votre galerie !`);
+      setTimeout(() => setUploadNotice(null), 3000);
+    };
+    reader.readAsDataURL(file);
   };
 
   const filtered = mediaAssets.filter((m) => {

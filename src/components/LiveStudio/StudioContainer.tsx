@@ -108,8 +108,8 @@ export const StudioContainer: React.FC<StudioContainerProps> = ({
   // Overlays state
   const [lowerThirdTitle, setLowerThirdTitle] = useState(currentStream.lowerThirdTitle || currentStream.title);
   const [lowerThirdSubtitle, setLowerThirdSubtitle] = useState(currentStream.lowerThirdSubtitle || `${currentUser.name} · En direct`);
-  const [bannerTickerText, setBannerTickerText] = useState(currentStream.activeBannerText || '🔴 DIRECT STREAMING · Posez vos questions et demandez la parole !');
-  const [isTickerActive, setIsTickerActive] = useState(currentStream.isTickerActive !== false);
+  const [bannerTickerText, setBannerTickerText] = useState(currentStream.activeBannerText || '');
+  const [isTickerActive, setIsTickerActive] = useState(currentStream.isTickerActive !== false && !!(currentStream.activeBannerText?.trim()));
   const [isEditingOverlays, setIsEditingOverlays] = useState(false);
 
   // Real-Time Room Join & Event Subscriptions
@@ -400,12 +400,14 @@ export const StudioContainer: React.FC<StudioContainerProps> = ({
               />
               <button
                 onClick={() => {
-                  onUpdateStream({
+                  const updates = {
                     lowerThirdTitle,
                     lowerThirdSubtitle,
                     activeBannerText: bannerTickerText,
-                    isTickerActive,
-                  });
+                    isTickerActive: !!bannerTickerText.trim() && isTickerActive,
+                  };
+                  onUpdateStream(updates);
+                  realtime.sendStreamUpdate(currentStream.id, updates);
                   setIsEditingOverlays(false);
                 }}
                 className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-xl font-bold cursor-pointer transition shrink-0"

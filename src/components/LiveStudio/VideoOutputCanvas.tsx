@@ -754,96 +754,96 @@ export const VideoOutputCanvas: React.FC<VideoOutputCanvasProps> = ({
           </div>
         )}
 
-        {/* AUTOMATED TV-STYLE NEWS TICKER MARQUEE (Bandeau d'information défilant type Télévision) */}
-        <div className="absolute bottom-0 inset-x-0 h-8 sm:h-9 bg-zinc-950/95 backdrop-blur-md border-t border-rose-500/50 flex items-center justify-between text-xs text-zinc-100 z-30 shadow-2xl overflow-hidden select-none">
-          {/* TV Label Badge (Static on the left, like TV channels) */}
-          <div className="flex items-center gap-1.5 px-3 py-1 bg-gradient-to-r from-red-600 to-rose-600 text-white font-extrabold text-[10px] uppercase tracking-wider shrink-0 z-30 shadow-md">
-            <span className="w-2 h-2 rounded-full bg-white animate-pulse" />
-            <span>TV LIVE</span>
-          </div>
-
-          {/* Scrolling Marquee Container (Immediate start at 0% with seamless doubled blocks) */}
-          <div className="flex-1 overflow-hidden relative h-full flex items-center px-2">
-            <div className={`flex items-center gap-6 ${isTickerRunning ? 'animate-tv-ticker' : 'overflow-x-auto'}`}>
-              <div className="flex items-center gap-5 shrink-0 font-medium text-[11px] sm:text-xs text-zinc-100">
-                <span className="text-rose-400 font-bold">🔴 {bannerTickerText || 'DIRECT STREAMING PRO'}</span>
-                <span className="text-zinc-500 font-bold">•</span>
-                <span className="text-white font-semibold">{streamTitle}</span>
-                <span className="text-zinc-500 font-bold">•</span>
-                <span className="text-amber-400">@{creatorName}</span>
-                <span className="text-zinc-500 font-bold">•</span>
-                <span className="text-emerald-400">📱 Synchronisé Téléphones & PC</span>
-                <span className="text-zinc-500 font-bold">•</span>
-              </div>
-              <div className="flex items-center gap-5 shrink-0 font-medium text-[11px] sm:text-xs text-zinc-100" aria-hidden="true">
-                <span className="text-rose-400 font-bold">🔴 {bannerTickerText || 'DIRECT STREAMING PRO'}</span>
-                <span className="text-zinc-500 font-bold">•</span>
-                <span className="text-white font-semibold">{streamTitle}</span>
-                <span className="text-zinc-500 font-bold">•</span>
-                <span className="text-amber-400">@{creatorName}</span>
-                <span className="text-zinc-500 font-bold">•</span>
-                <span className="text-emerald-400">📱 Synchronisé Téléphones & PC</span>
-                <span className="text-zinc-500 font-bold">•</span>
+        {/* NEWS TICKER MARQUEE - DISPLAYS ONLY WHAT THE CREATOR WRITES */}
+        {bannerTickerText && bannerTickerText.trim() ? (
+          <div className="absolute bottom-0 inset-x-0 h-8 sm:h-9 bg-zinc-950/95 backdrop-blur-md border-t border-rose-500/50 flex items-center justify-between text-xs text-zinc-100 z-30 shadow-2xl overflow-hidden select-none">
+            {/* Scrolling Marquee Container */}
+            <div className="flex-1 overflow-hidden relative h-full flex items-center px-3">
+              <div className={`flex items-center gap-8 ${isTickerRunning ? 'animate-tv-ticker' : 'overflow-x-auto'}`}>
+                <span className="shrink-0 font-bold text-xs text-white">
+                  {bannerTickerText.trim()}
+                </span>
+                <span className="shrink-0 font-bold text-xs text-white" aria-hidden="true">
+                  {bannerTickerText.trim()}
+                </span>
+                <span className="shrink-0 font-bold text-xs text-white" aria-hidden="true">
+                  {bannerTickerText.trim()}
+                </span>
               </div>
             </div>
-          </div>
 
-          {/* Right Action Controls: Admin Ticker Toggle & Fullscreen */}
-          <div className="flex items-center gap-1 px-2.5 bg-zinc-950/95 z-30 border-l border-zinc-800 shrink-0">
+            {/* Right Action Controls: Ticker Toggle & Fullscreen */}
+            <div className="flex items-center gap-1 px-2.5 bg-zinc-950/95 z-30 border-l border-zinc-800 shrink-0">
+              <button
+                onClick={() => {
+                  const next = !isTickerRunning;
+                  setIsTickerRunning(next);
+                  if (onToggleTicker) onToggleTicker();
+                }}
+                className={`px-2 py-0.5 rounded text-[10px] font-bold transition cursor-pointer flex items-center gap-1 ${
+                  isTickerRunning
+                    ? 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700 hover:text-white'
+                    : 'bg-amber-600 text-white hover:bg-amber-500'
+                }`}
+                title={isTickerRunning ? "Stopper le défilement du bandeau" : "Relancer le défilement du bandeau"}
+              >
+                <span>{isTickerRunning ? '⏸ Stopper' : '▶ Animer'}</span>
+              </button>
+
+              <button
+                onClick={toggleFullscreen}
+                className="p-1 rounded hover:bg-white/10 text-zinc-400 hover:text-white transition cursor-pointer"
+                title="Plein écran"
+              >
+                <Maximize className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+        ) : (
+          /* When no ticker is set, show floating fullscreen button at bottom right */
+          <div className="absolute bottom-3 right-3 z-30">
+            <button
+              onClick={toggleFullscreen}
+              className="p-2 rounded-xl bg-black/70 hover:bg-black/90 text-zinc-300 hover:text-white backdrop-blur-md border border-white/10 shadow-lg transition cursor-pointer"
+              title="Plein écran"
+            >
+              <Maximize className="w-4 h-4" />
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* External TV Ticker Dock Strip (Visible and accessible directly under the monitor) */}
+      <div className="p-3 bg-zinc-900 border border-zinc-800 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <span className="w-2.5 h-2.5 rounded-full bg-rose-500 animate-pulse shrink-0" />
+          <span className="font-bold text-white uppercase text-[10px] tracking-wider px-2 py-0.5 rounded bg-rose-600/20 text-rose-300 border border-rose-500/30 shrink-0">
+            Bandeau TV Live
+          </span>
+          <p className="text-zinc-300 text-xs truncate">
+            {bannerTickerText && bannerTickerText.trim()
+              ? bannerTickerText.trim()
+              : '(Bandeau vide — écrivez un texte ci-dessous pour l\'activer)'}
+          </p>
+        </div>
+
+        <div className="flex items-center gap-2 shrink-0">
+          {bannerTickerText && bannerTickerText.trim() && (
             <button
               onClick={() => {
                 const next = !isTickerRunning;
                 setIsTickerRunning(next);
                 if (onToggleTicker) onToggleTicker();
               }}
-              className={`px-2 py-0.5 rounded text-[10px] font-bold transition cursor-pointer flex items-center gap-1 ${
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5 shadow ${
                 isTickerRunning
-                  ? 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700 hover:text-white'
-                  : 'bg-amber-600 text-white hover:bg-amber-500'
+                  ? 'bg-amber-600 hover:bg-amber-500 text-white'
+                  : 'bg-emerald-600 hover:bg-emerald-500 text-white'
               }`}
-              title={isTickerRunning ? "Stopper le défilement du bandeau" : "Relancer le défilement du bandeau"}
             >
-              <span>{isTickerRunning ? '⏸ Stopper' : '▶ Animer'}</span>
+              <span>{isTickerRunning ? '⏸ Stopper le bandeau' : '▶ Lancer le bandeau TV'}</span>
             </button>
-
-            <button
-              onClick={toggleFullscreen}
-              className="p-1 rounded hover:bg-white/10 text-zinc-400 hover:text-white transition cursor-pointer"
-              title="Plein écran"
-            >
-              <Maximize className="w-3.5 h-3.5" />
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* External TV Ticker Dock Strip (Visible and accessible directly under the monitor) */}
-      <div className="p-3 bg-zinc-900 border border-zinc-800 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
-        <div className="flex items-center gap-2.5 min-w-0">
-          <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse shrink-0" />
-          <span className="font-bold text-white uppercase text-[10px] tracking-wider px-2 py-0.5 rounded bg-red-600/20 text-red-300 border border-red-500/30 shrink-0">
-            Bandeau TV Live
-          </span>
-          <p className="text-zinc-300 text-xs truncate">
-            {bannerTickerText || '🔴 DIRECT STREAMING · Posez vos questions et demandez la parole !'}
-          </p>
-        </div>
-
-        <div className="flex items-center gap-2 shrink-0">
-          <button
-            onClick={() => {
-              const next = !isTickerRunning;
-              setIsTickerRunning(next);
-              if (onToggleTicker) onToggleTicker();
-            }}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5 shadow ${
-              isTickerRunning
-                ? 'bg-amber-600 hover:bg-amber-500 text-white'
-                : 'bg-emerald-600 hover:bg-emerald-500 text-white'
-            }`}
-          >
-            <span>{isTickerRunning ? '⏸ Stopper le bandeau' : '▶ Lancer le bandeau TV'}</span>
-          </button>
+          )}
         </div>
       </div>
     </div>

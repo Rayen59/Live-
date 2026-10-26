@@ -8,7 +8,6 @@ import { AdminDashboard } from './components/Admin/AdminDashboard';
 import { AuthModal } from './components/AuthModal';
 import { CreateLiveModal } from './components/CreateLiveModal';
 import { VideoPlayerModal } from './components/VideoPlayerModal';
-import { AdminAccessModal } from './components/Admin/AdminAccessModal';
 import { EntranceGate } from './components/EntranceGate';
 import { SearchPage } from './components/Search/SearchPage';
 import { VideoEditorModal } from './components/Recording/VideoEditorModal';
@@ -39,7 +38,6 @@ export default function App() {
   // Modals
   const [isAuthOpen, setIsAuthOpen] = useState(false);
   const [isCreateLiveOpen, setIsCreateLiveOpen] = useState(false);
-  const [isAdminAccessModalOpen, setIsAdminAccessModalOpen] = useState(false);
   const [notificationToast, setNotificationToast] = useState<string | null>(null);
 
   // Cross-device Real-Time Sync (PC & Smartphone connection via SSE + automatic polling)
@@ -236,7 +234,6 @@ export default function App() {
         }}
         onOpenAuth={() => setIsAuthOpen(true)}
         onOpenNewLiveModal={() => setIsCreateLiveOpen(true)}
-        onRequestAdminAccess={() => setIsAdminAccessModalOpen(true)}
         searchQuery={searchQuery}
         setSearchQuery={setSearchQuery}
         onSwitchUser={handleSwitchUser}
@@ -361,13 +358,6 @@ export default function App() {
         video={editingRecording}
         onSaveToProfile={handleSaveEditedRecording}
         onDownloadToDevice={handleDownloadVideo}
-      />
-
-      {/* Admin Passcode Gate (Prevents any automatic or accidental entry) */}
-      <AdminAccessModal
-        isOpen={isAdminAccessModalOpen}
-        onClose={() => setIsAdminAccessModalOpen(false)}
-        onSuccess={handleAdminUnlocked}
       />
     </div>
   );

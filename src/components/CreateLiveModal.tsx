@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, Video, Camera, Monitor, Film, Sparkles, Radio, Smartphone, ScreenShare } from 'lucide-react';
 import { StreamCategory, VideoSourceType, LiveStream, User } from '../types';
+import { StorageService } from '../services/storage';
 
 interface CreateLiveModalProps {
   isOpen: boolean;
@@ -37,6 +38,7 @@ export const CreateLiveModal: React.FC<CreateLiveModalProps> = ({
   const [aspectRatio, setAspectRatio] = useState<'16:9' | '9:16'>(isMobileDevice ? '9:16' : '16:9');
   const [facingMode, setFacingMode] = useState<'user' | 'environment'>('user');
   const [sponsorVideo, setSponsorVideo] = useState<{ name: string; url: string } | null>(null);
+  const [customBannerText, setCustomBannerText] = useState('');
 
   useEffect(() => {
     if (isOpen) {
@@ -75,12 +77,12 @@ export const CreateLiveModal: React.FC<CreateLiveModalProps> = ({
       activeSource: initialSource,
       aspectRatio,
       cameraFacingMode: facingMode,
-      activeBannerText: `🔴 DIRECT DE ${currentUser.name.toUpperCase()} · Diffusion en direct`,
+      activeBannerText: customBannerText.trim(),
       lowerThirdTitle: title.trim(),
       lowerThirdSubtitle: `${currentUser.name} · ${category}`,
       sponsorVideoUrl: sponsorVideo?.url,
       sponsorVideoTitle: sponsorVideo?.name,
-      isTickerActive: true,
+      isTickerActive: !!customBannerText.trim(),
       tickerSpeed: 'normal',
     };
 
@@ -94,13 +96,7 @@ export const CreateLiveModal: React.FC<CreateLiveModalProps> = ({
         duration: 20,
         isAd: true,
       };
-      // StorageService.addMediaAsset
-      try {
-        const existing = JSON.parse(localStorage.getItem('streampulse_media_assets') || '[]');
-        localStorage.setItem('streampulse_media_assets', JSON.stringify([sponsorAsset, ...existing]));
-      } catch (err) {
-        console.error(err);
-      }
+      StorageService.addMediaAsset(sponsorAsset);
     }
 
     onCreateStream(newStream);
@@ -323,11 +319,19 @@ export const CreateLiveModal: React.FC<CreateLiveModalProps> = ({
                 onChange={(e) => {
                   const file = e.target.files?.[0];
                   if (file) {
-                    const url = URL.createObjectURL(file);
-                    setSponsorVideo({
-                      name: file.name,
-                      url: url,
-                    });
+                    if (file.size > 25 * 1024 * 1024) {
+                      alert('La vidéo sélectionnée dépasse 25 Mo. Veuillez choisir un clip plus court.');
+                      return;
+                    }
+                    const reader = new FileReader();
+                    reader.onload = () => {
+                      const dataUrl = reader.result as string;
+                      setSponsorVideo({
+                        name: file.name,
+                        url: dataUrl,
+                      });
+                    };
+                    reader.readAsDataURL(file);
                   }
                 }}
                 className="hidden"
@@ -370,6 +374,26 @@ export const CreateLiveModal: React.FC<CreateLiveModalProps> = ({
                 </button>
               </div>
             )}
+          </div>
+
+          {/* Custom TV Live Ticker Banner Input */}
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <label className="font-medium text-zinc-300">
+                Bandeau d'information défilant (Optionnel)
+              </label>
+              <span className="text-[10px] text-zinc-500">Visible en bas de l'écran</span>
+            </div>
+            <input
+              type="text"
+              value={customBannerText}
+              onChange={(e) => setCustomBannerText(e.target.value)}
+              placeholder="Écrivez le texte qui défilera sur votre bandeau live (vide = aucun bandeau)..."
+              className="w-full bg-zinc-950 border border-zinc-800 focus:border-rose-500 rounded-xl p-2.5 text-xs text-white placeholder:text-zinc-600 focus:outline-none"
+            />
+            <p className="text-[10px] text-zinc-500 mt-1">
+              Seul le texte que vous écrivez ici sera affiché aux spectateurs.
+            </p>
           </div>
 
           <div>
