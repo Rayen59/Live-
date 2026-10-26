@@ -1,4 +1,4 @@
-import express, { Response } from 'express';
+import express, { type Response } from 'express';
 import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI } from '@google/genai';
 import path from 'path';
