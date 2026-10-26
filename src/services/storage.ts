@@ -1,4 +1,5 @@
 import { User, LiveStream, RecordedVideo, ChatMessage, ModerationLog, MediaAsset } from '../types';
+import { realtime } from './realtime';
 
 // Storage keys
 const USERS_KEY = 'streampulse_users_v4_sync';
@@ -247,6 +248,7 @@ export const StorageService = {
       all.unshift(stream);
     }
     localStorage.setItem(STREAMS_KEY, JSON.stringify(all));
+    realtime.sendStreamUpdate(stream.id, stream);
 
     // Post to server for cross-device sync
     fetch('/api/sync/stream', {
@@ -337,6 +339,7 @@ export const StorageService = {
     const all = this.getChatMessages(message.streamId);
     all.push(message);
     localStorage.setItem(`${CHAT_KEY}_${message.streamId}`, JSON.stringify(all.slice(-150)));
+    realtime.sendChatMessage(message.streamId, message);
 
     // Send to server for real-time broadcast to mobile & PC
     fetch('/api/sync/chat', {
@@ -352,6 +355,12 @@ export const StorageService = {
   },
 
   sendMicAction(action: 'request' | 'accept' | 'decline' | 'mute' | 'remove', streamId: string, payload?: any): void {
+    if (action === 'request' && payload?.micRequest) {
+      realtime.sendMicRequest(streamId, payload.micRequest);
+    } else if (payload?.requestId) {
+      realtime.sendMicAction(streamId, action, payload.requestId, payload?.isMuted);
+    }
+
     fetch('/api/sync/mic', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

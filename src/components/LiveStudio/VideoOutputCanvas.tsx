@@ -20,8 +20,12 @@ import {
 } from 'lucide-react';
 import { VideoFilterSettings, VideoSourceType, MediaAsset, MicRequest, RecordedVideo } from '../../types';
 import { StorageService } from '../../services/storage';
+import { realtime } from '../../services/realtime';
 
 interface VideoOutputCanvasProps {
+  streamId?: string;
+  creatorId?: string;
+  onUpdateStream?: (updated: any) => void;
   streamTitle: string;
   category: string;
   creatorName: string;
@@ -51,6 +55,9 @@ interface VideoOutputCanvasProps {
 }
 
 export const VideoOutputCanvas: React.FC<VideoOutputCanvasProps> = ({
+  streamId,
+  creatorId,
+  onUpdateStream,
   streamTitle,
   category,
   creatorName,
@@ -187,6 +194,144 @@ export const VideoOutputCanvas: React.FC<VideoOutputCanvasProps> = ({
       }
     };
   }, [activeSource, filterSettings.resolution, facingMode, canvasFormat]);
+
+  // Real-Time WebRTC Peer-to-Peer & Canvas Video/Audio Broadcast
+  const peerConnectionsRef = useRef<Map<string, RTCPeerConnection>>(new Map());
+  const broadcastCanvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  // Periodically send video frame snapshots over WebSocket (5 fps) for instant visual sync
+  useEffect(() => {
+    if (!streamId) return;
+
+    const frameInterval = setInterval(() => {
+      try {
+        const activeVideoEl =
+          activeSource === 'media'
+            ? mediaAssetVideoRef.current
+            : videoRef.current;
+
+        if (!activeVideoEl || activeVideoEl.readyState < 2) return;
+
+        if (!broadcastCanvasRef.current) {
+          broadcastCanvasRef.current = document.createElement('canvas');
+          broadcastCanvasRef.current.width = 480;
+          broadcastCanvasRef.current.height = canvasFormat === '9:16' ? 854 : 270;
+        }
+
+        const cvs = broadcastCanvasRef.current;
+        const ctx = cvs.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(activeVideoEl, 0, 0, cvs.width, cvs.height);
+          const dataUrl = cvs.toDataURL('image/jpeg', 0.5);
+          realtime.sendVideoFrame(streamId, dataUrl);
+        }
+      } catch {}
+    }, 200);
+
+    return () => clearInterval(frameInterval);
+  }, [streamId, activeSource, canvasFormat]);
+
+  // WebRTC Broadcaster to send full HD video and microphone audio stream to viewers
+  useEffect(() => {
+    if (!streamId || !creatorId) return;
+
+    const unsubJoined = realtime.on('viewer_joined', async ({ viewerId }) => {
+      try {
+        let broadcastStream = streamObj;
+        if (!broadcastStream) {
+          const activeVideoEl = videoRef.current || mediaAssetVideoRef.current;
+          if (activeVideoEl && (activeVideoEl as any).captureStream) {
+            broadcastStream = (activeVideoEl as any).captureStream(30);
+          } else if (broadcastCanvasRef.current && (broadcastCanvasRef.current as any).captureStream) {
+            broadcastStream = (broadcastCanvasRef.current as any).captureStream(30);
+          }
+        }
+
+        const pc = new RTCPeerConnection({
+          iceServers: [
+            { urls: 'stun:stun.l.google.com:19302' },
+            { urls: 'stun:stun1.l.google.com:19302' },
+          ],
+        });
+
+        peerConnectionsRef.current.set(viewerId, pc);
+
+        if (broadcastStream) {
+          broadcastStream.getTracks().forEach((track) => {
+            pc.addTrack(track, broadcastStream!);
+          });
+        }
+
+        pc.onicecandidate = (event) => {
+          if (event.candidate) {
+            realtime.sendWebRTCSignal(streamId, viewerId, creatorId, {
+              type: 'candidate',
+              candidate: event.candidate,
+            });
+          }
+        };
+
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+
+        realtime.sendWebRTCSignal(streamId, viewerId, creatorId, {
+          type: 'offer',
+          sdp: pc.localDescription,
+        });
+      } catch (err) {
+        console.warn('[WebRTC Broadcaster] Erreur création offre:', err);
+      }
+    });
+
+    const unsubSignal = realtime.on('webrtc_signal', async ({ senderId, signal }) => {
+      const pc = peerConnectionsRef.current.get(senderId);
+      if (!pc) return;
+
+      try {
+        if (signal.type === 'answer') {
+          await pc.setRemoteDescription(new RTCSessionDescription(signal.sdp));
+        } else if (signal.type === 'candidate' && signal.candidate) {
+          await pc.addIceCandidate(new RTCIceCandidate(signal.candidate));
+        }
+      } catch (e) {
+        console.warn('[WebRTC Broadcaster] Signal error:', e);
+      }
+    });
+
+    const unsubLeft = realtime.on('viewer_left', ({ viewerId }) => {
+      const pc = peerConnectionsRef.current.get(viewerId);
+      if (pc) {
+        pc.close();
+        peerConnectionsRef.current.delete(viewerId);
+      }
+    });
+
+    return () => {
+      unsubJoined();
+      unsubSignal();
+      unsubLeft();
+      peerConnectionsRef.current.forEach((pc) => pc.close());
+      peerConnectionsRef.current.clear();
+    };
+  }, [streamId, creatorId, streamObj]);
+
+  // Replace tracks if streamObj changes (e.g. camera flip, screen share)
+  useEffect(() => {
+    if (!streamObj) return;
+    peerConnectionsRef.current.forEach((pc) => {
+      const senders = pc.getSenders();
+      streamObj.getTracks().forEach((track) => {
+        const sender = senders.find((s) => s.track && s.track.kind === track.kind);
+        if (sender) {
+          sender.replaceTrack(track).catch(() => {});
+        } else {
+          try {
+            pc.addTrack(track, streamObj!);
+          } catch {}
+        }
+      });
+    });
+  }, [streamObj]);
 
   // Handle Recording start / stop
   useEffect(() => {

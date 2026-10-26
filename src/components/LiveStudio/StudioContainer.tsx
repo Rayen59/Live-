@@ -35,6 +35,7 @@ import { AICopilotPanel } from './AICopilotPanel';
 import { LiveChat } from '../Chat/LiveChat';
 import { ModerationModal } from '../Chat/ModerationModal';
 import { StorageService } from '../../services/storage';
+import { realtime } from '../../services/realtime';
 
 interface StudioContainerProps {
   currentUser: User;
@@ -97,6 +98,9 @@ export const StudioContainer: React.FC<StudioContainerProps> = ({
   // Mic Requests & On-air guest speakers
   const [micRequests, setMicRequests] = useState<MicRequest[]>([]);
 
+  // Live Viewer Count in Real-Time
+  const [liveViewerCount, setLiveViewerCount] = useState<number>(currentStream.viewerCount || 1);
+
   // Live Chat messages state
   const [messages, setMessages] = useState<ChatMessage[]>(StorageService.getChatMessages(currentStream.id));
   const [isAutoModEnabled, setIsAutoModEnabled] = useState(true);
@@ -107,6 +111,36 @@ export const StudioContainer: React.FC<StudioContainerProps> = ({
   const [bannerTickerText, setBannerTickerText] = useState(currentStream.activeBannerText || '🔴 DIRECT STREAMING · Posez vos questions et demandez la parole !');
   const [isTickerActive, setIsTickerActive] = useState(currentStream.isTickerActive !== false);
   const [isEditingOverlays, setIsEditingOverlays] = useState(false);
+
+  // Real-Time Room Join & Event Subscriptions
+  useEffect(() => {
+    realtime.join(currentStream.id, 'broadcaster', currentUser);
+
+    const unsubViewers = realtime.on('viewer_count_updated', ({ viewerCount }) => {
+      if (typeof viewerCount === 'number') {
+        setLiveViewerCount(viewerCount);
+      }
+    });
+
+    const unsubMics = realtime.on('mics_updated', ({ mics }) => {
+      if (Array.isArray(mics)) {
+        setMicRequests(mics);
+      }
+    });
+
+    const unsubChat = realtime.on('chat_message', ({ message }) => {
+      if (message && message.streamId === currentStream.id) {
+        setMessages((prev) => (prev.some((m) => m.id === message.id) ? prev : [...prev, message]));
+      }
+    });
+
+    return () => {
+      unsubViewers();
+      unsubMics();
+      unsubChat();
+      realtime.leave(currentStream.id, currentUser.id);
+    };
+  }, [currentStream.id, currentUser.id]);
 
   // Recording state
   const [isRecording, setIsRecording] = useState(!!currentStream.isRecording);
@@ -143,60 +177,76 @@ export const StudioContainer: React.FC<StudioContainerProps> = ({
     setActiveMediaId(asset.id);
     const newSource: VideoSourceType = asset.type === 'video' ? 'media' : 'poster';
     setActiveSource(newSource);
-    onUpdateStream({
+    const update = {
       activeSource: newSource,
       currentMediaId: asset.id,
+      sponsorVideoUrl: asset.url,
+      sponsorVideoTitle: asset.name,
       adSoloCountdown: duration || 15,
-      adAutoReturnTargetSource: 'camera',
-    });
+      adAutoReturnTargetSource: 'camera' as VideoSourceType,
+    };
+    onUpdateStream(update);
+    realtime.sendStreamUpdate(currentStream.id, update);
   };
 
   // Broadcast media in parallel (Picture-in-Picture window inside the live broadcast while live camera stays active)
   const handleSelectMediaParallel = (asset: MediaAsset) => {
     setParallelMediaId(asset.id);
-    onUpdateStream({
+    const update = {
       parallelMediaId: asset.id,
-      parallelMediaMode: 'pip',
-    });
+      parallelMediaMode: 'pip' as const,
+    };
+    onUpdateStream(update);
+    realtime.sendStreamUpdate(currentStream.id, update);
   };
 
   // Stop parallel media broadcast
   const handleStopParallelMedia = () => {
     setParallelMediaId(undefined);
-    onUpdateStream({
+    const update = {
       parallelMediaId: undefined,
       parallelMediaMode: null,
-    });
+    };
+    onUpdateStream(update);
+    realtime.sendStreamUpdate(currentStream.id, update);
   };
 
   // Return to live camera (from solo media or poster)
   const handleReturnToLiveCamera = () => {
     setActiveSource('camera');
     setActiveMediaId(undefined);
-    onUpdateStream({
-      activeSource: 'camera',
+    const update = {
+      activeSource: 'camera' as VideoSourceType,
       currentMediaId: undefined,
       adSoloCountdown: undefined,
-    });
+    };
+    onUpdateStream(update);
+    realtime.sendStreamUpdate(currentStream.id, update);
   };
 
   const handleAcceptMic = (reqId: string) => {
+    StorageService.sendMicAction('accept', currentStream.id, { requestId: reqId });
     setMicRequests((prev) =>
       prev.map((r) => (r.id === reqId ? { ...r, status: 'accepted', isMuted: false } : r))
     );
   };
 
   const handleDeclineMic = (reqId: string) => {
+    StorageService.sendMicAction('decline', currentStream.id, { requestId: reqId });
     setMicRequests((prev) => prev.filter((r) => r.id !== reqId));
   };
 
   const handleToggleMuteSpeaker = (reqId: string) => {
+    const target = micRequests.find((r) => r.id === reqId);
+    const nextMuted = target ? !target.isMuted : true;
+    StorageService.sendMicAction('mute', currentStream.id, { requestId: reqId, isMuted: nextMuted });
     setMicRequests((prev) =>
-      prev.map((r) => (r.id === reqId ? { ...r, isMuted: !r.isMuted } : r))
+      prev.map((r) => (r.id === reqId ? { ...r, isMuted: nextMuted } : r))
     );
   };
 
   const handleRemoveSpeaker = (reqId: string) => {
+    StorageService.sendMicAction('remove', currentStream.id, { requestId: reqId });
     setMicRequests((prev) => prev.filter((r) => r.id !== reqId));
   };
 
@@ -463,6 +513,8 @@ export const StudioContainer: React.FC<StudioContainerProps> = ({
 
           {/* Real-time Program Canvas */}
           <VideoOutputCanvas
+            streamId={currentStream.id}
+            creatorId={currentUser.id}
             streamTitle={currentStream.title}
             category={currentStream.category}
             creatorName={currentUser.name}
@@ -479,7 +531,7 @@ export const StudioContainer: React.FC<StudioContainerProps> = ({
             bannerTickerText={bannerTickerText}
             lowerThirdTitle={lowerThirdTitle}
             lowerThirdSubtitle={lowerThirdSubtitle}
-            viewerCount={currentStream.viewerCount}
+            viewerCount={liveViewerCount}
             onRecordingSaved={onRecordingSaved}
             aspectRatio={currentStream.aspectRatio}
             cameraFacingMode={currentStream.cameraFacingMode}
@@ -488,6 +540,7 @@ export const StudioContainer: React.FC<StudioContainerProps> = ({
               const next = !isTickerActive;
               setIsTickerActive(next);
               onUpdateStream({ isTickerActive: next });
+              realtime.sendStreamUpdate(currentStream.id, { isTickerActive: next });
             }}
             sponsorVideoUrl={currentStream.sponsorVideoUrl}
             sponsorVideoTitle={currentStream.sponsorVideoTitle}

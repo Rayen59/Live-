@@ -1,4 +1,6 @@
 import express, { type Response } from 'express';
+import http from 'http';
+import { WebSocketServer, WebSocket } from 'ws';
 import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI } from '@google/genai';
 import path from 'path';
@@ -32,6 +34,85 @@ const sharedState: SharedServerState = {
   pairs: {},
 };
 
+// Real-Time Live Stream Rooms for WebSockets, WebRTC Signaling & Instant sync
+interface StreamRoom {
+  streamId: string;
+  broadcaster?: WebSocket;
+  broadcasterUser?: any;
+  viewers: Map<string, { ws: WebSocket; user: any; joinedAt: number }>;
+  lastVideoFrame?: string;
+}
+
+const rooms = new Map<string, StreamRoom>();
+
+function getOrCreateRoom(streamId: string): StreamRoom {
+  let room = rooms.get(streamId);
+  if (!room) {
+    room = {
+      streamId,
+      viewers: new Map(),
+    };
+    rooms.set(streamId, room);
+  }
+  return room;
+}
+
+function broadcastToRoom(room: StreamRoom, payload: any) {
+  const str = JSON.stringify(payload);
+  if (room.broadcaster && room.broadcaster.readyState === WebSocket.OPEN) {
+    try {
+      room.broadcaster.send(str);
+    } catch {}
+  }
+  for (const [_, v] of room.viewers) {
+    if (v.ws.readyState === WebSocket.OPEN) {
+      try {
+        v.ws.send(str);
+      } catch {}
+    }
+  }
+}
+
+function handleLeave(ws: WebSocket, streamId?: string, userId?: string) {
+  const targetStreamId = streamId || (ws as any).streamId;
+  const targetUserId = userId || (ws as any).userId;
+  if (!targetStreamId) return;
+
+  const room = rooms.get(targetStreamId);
+  if (!room) return;
+
+  if (room.broadcaster === ws) {
+    room.broadcaster = undefined;
+    broadcastToRoom(room, { type: 'broadcaster_offline', streamId: targetStreamId });
+  }
+
+  if (targetUserId && room.viewers.has(targetUserId)) {
+    room.viewers.delete(targetUserId);
+    const stream = sharedState.streams.find((s) => s.id === targetStreamId);
+    if (stream) {
+      stream.viewerCount = room.viewers.size;
+    }
+    broadcastToRoom(room, {
+      type: 'viewer_count_updated',
+      streamId: targetStreamId,
+      viewerCount: room.viewers.size,
+      viewers: Array.from(room.viewers.values()).map((v) => v.user),
+    });
+    if (room.broadcaster && room.broadcaster.readyState === WebSocket.OPEN) {
+      try {
+        room.broadcaster.send(
+          JSON.stringify({
+            type: 'viewer_left',
+            streamId: targetStreamId,
+            viewerId: targetUserId,
+          })
+        );
+      } catch {}
+    }
+    broadcastSSE('stream_updated', { stream, streams: sharedState.streams });
+  }
+}
+
 // SSE active subscribers (phones & PCs)
 const sseClients: Response[] = [];
 
@@ -48,7 +129,210 @@ function broadcastSSE(type: string, data: any) {
 
 async function bootstrap() {
   const app = express();
-  app.use(express.json({ limit: '25mb' }));
+  app.use(express.json({ limit: '50mb' }));
+
+  const httpServer = http.createServer(app);
+  const wss = new WebSocketServer({ noServer: true });
+
+  httpServer.on('upgrade', (request, socket, head) => {
+    try {
+      const { pathname } = new URL(request.url || '', `http://${request.headers.host || 'localhost'}`);
+      if (pathname === '/ws' || pathname.startsWith('/ws')) {
+        wss.handleUpgrade(request, socket, head, (ws) => {
+          wss.emit('connection', ws, request);
+        });
+      }
+    } catch (e) {
+      // Ignore invalid URLs
+    }
+  });
+
+  // WebSocket Connection Handler
+  wss.on('connection', (ws) => {
+    ws.on('message', (raw) => {
+      try {
+        const msg = JSON.parse(raw.toString());
+        const { type, streamId } = msg;
+        if (!streamId && type !== 'ping') return;
+
+        if (type === 'join') {
+          const { role, user } = msg;
+          const room = getOrCreateRoom(streamId);
+          (ws as any).streamId = streamId;
+          (ws as any).userId = user?.id;
+          (ws as any).role = role;
+
+          if (role === 'broadcaster') {
+            room.broadcaster = ws;
+            room.broadcasterUser = user;
+            for (const [_, v] of room.viewers) {
+              if (v.ws.readyState === WebSocket.OPEN) {
+                try {
+                  v.ws.send(JSON.stringify({ type: 'broadcaster_online', streamId, broadcaster: user }));
+                } catch {}
+              }
+            }
+          } else {
+            room.viewers.set(user.id, { ws, user, joinedAt: Date.now() });
+            const stream = sharedState.streams.find((s) => s.id === streamId);
+            if (stream) {
+              stream.viewerCount = room.viewers.size;
+            }
+
+            const viewerCountPayload = {
+              type: 'viewer_count_updated',
+              streamId,
+              viewerCount: room.viewers.size,
+              viewers: Array.from(room.viewers.values()).map((v) => v.user),
+            };
+            broadcastToRoom(room, viewerCountPayload);
+            broadcastSSE('stream_updated', { stream, streams: sharedState.streams });
+
+            if (room.broadcaster && room.broadcaster.readyState === WebSocket.OPEN) {
+              try {
+                room.broadcaster.send(
+                  JSON.stringify({
+                    type: 'viewer_joined',
+                    streamId,
+                    viewerId: user.id,
+                    viewer: user,
+                  })
+                );
+              } catch {}
+            }
+
+            ws.send(
+              JSON.stringify({
+                type: 'initial_state',
+                stream,
+                lastFrame: room.lastVideoFrame,
+                mics: sharedState.mics[streamId] || [],
+                viewerCount: room.viewers.size,
+              })
+            );
+          }
+        } else if (type === 'leave') {
+          const { userId } = msg;
+          handleLeave(ws, streamId, userId);
+        } else if (type === 'stream_update') {
+          const { data } = msg;
+          const streamIdx = sharedState.streams.findIndex((s) => s.id === streamId);
+          if (streamIdx !== -1) {
+            sharedState.streams[streamIdx] = { ...sharedState.streams[streamIdx], ...data };
+          }
+          const room = rooms.get(streamId);
+          if (room) {
+            broadcastToRoom(room, { type: 'stream_update', streamId, data });
+          }
+          broadcastSSE('stream_updated', { stream: sharedState.streams[streamIdx], streams: sharedState.streams });
+        } else if (type === 'chat_message') {
+          const { message } = msg;
+          if (!sharedState.chat[streamId]) sharedState.chat[streamId] = [];
+          sharedState.chat[streamId].push(message);
+          const room = rooms.get(streamId);
+          if (room) {
+            broadcastToRoom(room, { type: 'chat_message', streamId, message });
+          }
+          broadcastSSE('chat_message', message);
+        } else if (type === 'mic_request') {
+          const { request } = msg;
+          if (!sharedState.mics[streamId]) sharedState.mics[streamId] = [];
+          const exists = sharedState.mics[streamId].find((r) => r.id === request.id || r.userId === request.userId);
+          if (!exists) {
+            sharedState.mics[streamId].push(request);
+          }
+          const room = rooms.get(streamId);
+          if (room) {
+            broadcastToRoom(room, { type: 'mics_updated', streamId, mics: sharedState.mics[streamId] });
+          }
+          broadcastSSE('mics_updated', { streamId, mics: sharedState.mics[streamId] });
+        } else if (type === 'mic_action') {
+          const { action, requestId, isMuted } = msg;
+          if (!sharedState.mics[streamId]) sharedState.mics[streamId] = [];
+          if (action === 'accept') {
+            sharedState.mics[streamId] = sharedState.mics[streamId].map((r) =>
+              r.id === requestId ? { ...r, status: 'accepted', isMuted: false } : r
+            );
+          } else if (action === 'decline' || action === 'remove') {
+            sharedState.mics[streamId] = sharedState.mics[streamId].filter((r) => r.id !== requestId);
+          } else if (action === 'mute') {
+            sharedState.mics[streamId] = sharedState.mics[streamId].map((r) =>
+              r.id === requestId ? { ...r, isMuted: typeof isMuted === 'boolean' ? isMuted : !r.isMuted } : r
+            );
+          }
+          const room = rooms.get(streamId);
+          if (room) {
+            broadcastToRoom(room, {
+              type: 'mics_updated',
+              streamId,
+              mics: sharedState.mics[streamId],
+            });
+            broadcastToRoom(room, {
+              type: 'mic_status_changed',
+              requestId,
+              action,
+              isMuted,
+            });
+          }
+          broadcastSSE('mics_updated', { streamId, mics: sharedState.mics[streamId] });
+        } else if (type === 'webrtc_signal') {
+          const { targetId, senderId, signal } = msg;
+          const room = rooms.get(streamId);
+          if (room) {
+            if ((ws as any).role === 'viewer') {
+              if (room.broadcaster && room.broadcaster.readyState === WebSocket.OPEN) {
+                try {
+                  room.broadcaster.send(
+                    JSON.stringify({
+                      type: 'webrtc_signal',
+                      streamId,
+                      senderId,
+                      targetId,
+                      signal,
+                    })
+                  );
+                } catch {}
+              }
+            } else {
+              const targetViewer = room.viewers.get(targetId);
+              if (targetViewer && targetViewer.ws.readyState === WebSocket.OPEN) {
+                try {
+                  targetViewer.ws.send(
+                    JSON.stringify({
+                      type: 'webrtc_signal',
+                      streamId,
+                      senderId,
+                      signal,
+                    })
+                  );
+                } catch {}
+              }
+            }
+          }
+        } else if (type === 'video_frame') {
+          const { frame } = msg;
+          const room = rooms.get(streamId);
+          if (room) {
+            room.lastVideoFrame = frame;
+            const payload = JSON.stringify({ type: 'video_frame', streamId, frame });
+            for (const [_, v] of room.viewers) {
+              if (v.ws.readyState === WebSocket.OPEN) {
+                try {
+                  v.ws.send(payload);
+                } catch {}
+              }
+            }
+          }
+        }
+      } catch (err) {
+        console.error('[WS] Erreur parsing message:', err);
+      }
+    });
+
+    ws.on('close', () => {
+      handleLeave(ws);
+    });
+  });
 
   // Initialize server-side Gemini client
   const ai = new GoogleGenAI({
@@ -153,6 +437,11 @@ async function bootstrap() {
       sharedState.streams.unshift(stream);
     }
 
+    const room = rooms.get(stream.id);
+    if (room) {
+      broadcastToRoom(room, { type: 'stream_update', streamId: stream.id, data: stream });
+    }
+
     broadcastSSE('stream_updated', { stream, streams: sharedState.streams });
     res.json({ success: true, stream: sharedState.streams.find((s) => s.id === stream.id) });
   });
@@ -161,6 +450,11 @@ async function bootstrap() {
   app.delete('/api/sync/stream/:id', (req, res) => {
     const { id } = req.params;
     sharedState.streams = sharedState.streams.filter((s) => s.id !== id);
+    const room = rooms.get(id);
+    if (room) {
+      broadcastToRoom(room, { type: 'stream_ended', streamId: id });
+      rooms.delete(id);
+    }
     broadcastSSE('stream_ended', { streamId: id, streams: sharedState.streams });
     res.json({ success: true });
   });
@@ -179,6 +473,10 @@ async function bootstrap() {
       sharedState.chat[msg.streamId] = [];
     }
     sharedState.chat[msg.streamId].push(msg);
+    const room = rooms.get(msg.streamId);
+    if (room) {
+      broadcastToRoom(room, { type: 'chat_message', streamId: msg.streamId, message: msg });
+    }
     broadcastSSE('chat_message', msg);
     res.json({ success: true, message: msg });
   });
@@ -214,6 +512,12 @@ async function bootstrap() {
       );
     } else if (action === 'remove' && requestId) {
       sharedState.mics[streamId] = sharedState.mics[streamId].filter((r: any) => r.id !== requestId);
+    }
+
+    const room = rooms.get(streamId);
+    if (room) {
+      broadcastToRoom(room, { type: 'mics_updated', streamId, mics: sharedState.mics[streamId] });
+      broadcastToRoom(room, { type: 'mic_status_changed', requestId, action, isMuted });
     }
 
     broadcastSSE('mics_updated', { streamId, mics: sharedState.mics[streamId] });
@@ -271,6 +575,7 @@ async function bootstrap() {
     sharedState.chat = {};
     sharedState.mics = {};
     sharedState.pairs = {};
+    rooms.clear();
     broadcastSSE('reset', {});
     res.json({ success: true });
   });
@@ -441,7 +746,7 @@ Réponds au format JSON:
     });
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
+  httpServer.listen(PORT, '0.0.0.0', () => {
     console.log(`Serveur StreamPulse en écoute sur http://0.0.0.0:${PORT}`);
   });
 }
