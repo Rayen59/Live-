@@ -63,6 +63,11 @@ export const StorageService = {
         if (Array.isArray(data.recordings)) {
           localStorage.setItem(RECORDINGS_KEY, JSON.stringify(data.recordings));
         }
+        if (Array.isArray(data.media) && data.media.length > 0) {
+          const current = this.getMediaAssets();
+          const merged = [...data.media, ...current.filter((c) => !data.media.some((m: any) => m.id === c.id))];
+          localStorage.setItem(MEDIA_KEY, JSON.stringify(merged));
+        }
         return data;
       }
     } catch {}
@@ -321,8 +326,16 @@ export const StorageService = {
 
   addMediaAsset(asset: MediaAsset): void {
     const all = this.getMediaAssets();
-    all.unshift(asset);
-    localStorage.setItem(MEDIA_KEY, JSON.stringify(all));
+    const exists = all.some((m) => m.id === asset.id);
+    if (!exists) {
+      all.unshift(asset);
+      localStorage.setItem(MEDIA_KEY, JSON.stringify(all));
+    }
+    fetch('/api/sync/media', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(asset),
+    }).catch(() => {});
   },
 
   getChatMessages(streamId: string): ChatMessage[] {

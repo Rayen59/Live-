@@ -67,10 +67,15 @@ export default function App() {
           setAllStreams((prev) => {
             const exists = prev.some((s) => s.id === singleStream.id);
             if (exists) {
-              return prev.map((s) => (s.id === singleStream.id ? singleStream : s));
+              return prev.map((s) => (s.id === singleStream.id ? { ...s, ...singleStream } : s));
             }
             return [singleStream, ...prev];
           });
+        }
+        if (singleStream && singleStream.id) {
+          setActiveViewingStream((curr) =>
+            curr && curr.id === singleStream.id ? { ...curr, ...singleStream } : curr
+          );
         }
       } else if (event.type === 'stream_ended') {
         const streamId = event.data?.streamId || event.data?.id;
@@ -276,11 +281,33 @@ export default function App() {
                 activeStream={allStreams[0]}
                 onUpdateStream={(updated) => {
                   const curr = allStreams[0];
-                  if (curr) {
-                    const merged = { ...curr, ...updated };
-                    StorageService.saveStream(merged);
-                    setAllStreams((prev) => [merged, ...prev.slice(1)]);
-                  }
+                  const merged = curr
+                    ? { ...curr, ...updated }
+                    : {
+                        id: `stream_studio_${currentUser.id}`,
+                        creatorId: currentUser.id,
+                        creatorName: currentUser.username,
+                        creatorAvatar: currentUser.avatar,
+                        title: `Direct de ${currentUser.name}`,
+                        description: 'Diffusion en direct interactive StreamPulse.',
+                        category: 'Tech & Dev' as const,
+                        tags: ['Direct', 'Live'],
+                        thumbnail:
+                          'https://images.unsplash.com/photo-1550745165-9bc0b252726f?w=800&auto=format&fit=crop&q=80',
+                        isLive: true,
+                        startedAt: new Date().toISOString(),
+                        viewerCount: 1,
+                        activeSource: 'camera' as const,
+                        ...updated,
+                      };
+                  StorageService.saveStream(merged);
+                  setAllStreams((prev) => {
+                    const exists = prev.some((s) => s.id === merged.id);
+                    if (exists) {
+                      return prev.map((s) => (s.id === merged.id ? merged : s));
+                    }
+                    return [merged, ...prev];
+                  });
                 }}
                 onEndLiveStream={handleEndLiveStream}
                 onRecordingSaved={handleRecordingSaved}

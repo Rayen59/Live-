@@ -5,7 +5,6 @@ import {
   Pin, 
   Trash2, 
   ShieldAlert, 
-  DollarSign, 
   Sparkles, 
   AlertTriangle,
   UserCheck,
@@ -18,7 +17,7 @@ interface LiveChatProps {
   stream: LiveStream;
   currentUser: User;
   messages: ChatMessage[];
-  onSendMessage: (text: string, isSuperChat?: boolean, tipAmount?: number) => void;
+  onSendMessage: (text: string) => void;
   onDeleteMessage: (messageId: string) => void;
   onPinMessage: (messageId: string) => void;
   isAutoModEnabled: boolean;
@@ -36,8 +35,6 @@ export const LiveChat: React.FC<LiveChatProps> = ({
   onOpenModerationModal,
 }) => {
   const [inputText, setInputText] = useState('');
-  const [isSuperChatOpen, setIsSuperChatOpen] = useState(false);
-  const [tipAmount, setTipAmount] = useState(5);
   const [showEmojis, setShowEmojis] = useState(false);
   const [moderationWarning, setModerationWarning] = useState<string | null>(null);
   const [slowModeCountdown, setSlowModeCountdown] = useState(0);
@@ -82,9 +79,8 @@ export const LiveChat: React.FC<LiveChatProps> = ({
       }
     }
 
-    onSendMessage(inputText, isSuperChatOpen, isSuperChatOpen ? tipAmount : undefined);
+    onSendMessage(inputText);
     setInputText('');
-    setIsSuperChatOpen(false);
 
     if (stream.isSlowMode && currentUser.role === 'viewer') {
       setSlowModeCountdown(stream.slowModeSeconds || 5);
@@ -224,39 +220,6 @@ export const LiveChat: React.FC<LiveChatProps> = ({
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Super Chat Tip Box Selector */}
-      {isSuperChatOpen && (
-        <div className="p-3 bg-amber-950/40 border-t border-amber-500/30 text-xs">
-          <div className="flex items-center justify-between mb-2">
-            <span className="font-bold text-amber-300 flex items-center gap-1">
-              <DollarSign className="w-3.5 h-3.5 text-amber-400" />
-              Envoyer un Super Chat pour soutenir le streamer
-            </span>
-            <button
-              onClick={() => setIsSuperChatOpen(false)}
-              className="text-zinc-400 hover:text-white"
-            >
-              ✕
-            </button>
-          </div>
-          <div className="flex items-center gap-2">
-            {[2, 5, 10, 20, 50].map((amt) => (
-              <button
-                key={amt}
-                onClick={() => setTipAmount(amt)}
-                className={`px-2.5 py-1 rounded-lg font-bold transition ${
-                  tipAmount === amt
-                    ? 'bg-amber-500 text-zinc-950 shadow-md'
-                    : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'
-                }`}
-              >
-                {amt} €
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
       {/* Quick Emojis Bar */}
       {showEmojis && (
         <div className="px-3 py-1.5 bg-zinc-950 border-t border-zinc-800 flex items-center gap-2 overflow-x-auto">
@@ -284,17 +247,6 @@ export const LiveChat: React.FC<LiveChatProps> = ({
             title="Émojis"
           >
             <Smile className="w-4 h-4" />
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setIsSuperChatOpen(!isSuperChatOpen)}
-            className={`p-2 rounded-xl transition ${
-              isSuperChatOpen ? 'bg-amber-500 text-zinc-950 font-bold' : 'text-zinc-400 hover:text-amber-400 hover:bg-zinc-800'
-            }`}
-            title="Envoyer un don Super Chat"
-          >
-            <DollarSign className="w-4 h-4" />
           </button>
 
           <input

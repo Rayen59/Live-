@@ -174,12 +174,15 @@ export const StudioContainer: React.FC<StudioContainerProps> = ({
 
   // Broadcast media solo (takes full program output, auto-returns to live camera after countdown or on finish)
   const handleSelectMediaSolo = (asset: MediaAsset, duration?: number) => {
+    StorageService.addMediaAsset(asset);
     setActiveMediaId(asset.id);
     const newSource: VideoSourceType = asset.type === 'video' ? 'media' : 'poster';
     setActiveSource(newSource);
     const update = {
       activeSource: newSource,
       currentMediaId: asset.id,
+      currentMediaUrl: asset.url,
+      currentMediaType: asset.type,
       sponsorVideoUrl: asset.url,
       sponsorVideoTitle: asset.name,
       adSoloCountdown: duration || 15,
@@ -191,9 +194,13 @@ export const StudioContainer: React.FC<StudioContainerProps> = ({
 
   // Broadcast media in parallel (Picture-in-Picture window inside the live broadcast while live camera stays active)
   const handleSelectMediaParallel = (asset: MediaAsset) => {
+    StorageService.addMediaAsset(asset);
     setParallelMediaId(asset.id);
     const update = {
       parallelMediaId: asset.id,
+      parallelMediaUrl: asset.url,
+      parallelMediaName: asset.name,
+      parallelMediaType: asset.type,
       parallelMediaMode: 'pip' as const,
     };
     onUpdateStream(update);
@@ -205,6 +212,9 @@ export const StudioContainer: React.FC<StudioContainerProps> = ({
     setParallelMediaId(undefined);
     const update = {
       parallelMediaId: undefined,
+      parallelMediaUrl: undefined,
+      parallelMediaName: undefined,
+      parallelMediaType: undefined,
       parallelMediaMode: null,
     };
     onUpdateStream(update);
@@ -218,6 +228,10 @@ export const StudioContainer: React.FC<StudioContainerProps> = ({
     const update = {
       activeSource: 'camera' as VideoSourceType,
       currentMediaId: undefined,
+      currentMediaUrl: undefined,
+      currentMediaType: undefined,
+      sponsorVideoUrl: undefined,
+      sponsorVideoTitle: undefined,
       adSoloCountdown: undefined,
     };
     onUpdateStream(update);
@@ -250,7 +264,7 @@ export const StudioContainer: React.FC<StudioContainerProps> = ({
     setMicRequests((prev) => prev.filter((r) => r.id !== reqId));
   };
 
-  const handleSendMessage = (text: string, isSuperChat?: boolean, tipAmount?: number) => {
+  const handleSendMessage = (text: string) => {
     const newMsg: ChatMessage = {
       id: `msg_${Date.now()}`,
       streamId: currentStream.id,
@@ -260,8 +274,6 @@ export const StudioContainer: React.FC<StudioContainerProps> = ({
       role: currentUser.role,
       text,
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      isSuperChat,
-      tipAmount,
     };
     StorageService.saveChatMessage(newMsg);
     setMessages((prev) => [...prev, newMsg]);

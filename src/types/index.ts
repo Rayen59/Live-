@@ -98,7 +98,12 @@ export interface LiveStream {
   isRecording?: boolean;
   recordingStartTime?: string;
   parallelMediaId?: string; // Broadcast ad in parallel (Picture-in-Picture)
+  parallelMediaUrl?: string; // Direct URL for real-time viewer playback
+  parallelMediaName?: string;
+  parallelMediaType?: 'video' | 'image';
   parallelMediaMode?: 'pip' | 'split' | null;
+  currentMediaUrl?: string; // Direct URL for solo ad/media
+  currentMediaType?: 'video' | 'image';
   adSoloCountdown?: number; // Countdown when ad is broadcasting solo
   adAutoReturnTargetSource?: VideoSourceType; // Source to return to automatically
   aspectRatio?: '16:9' | '9:16'; // 16:9 (Desktop) or 9:16 (Format Smartphone)

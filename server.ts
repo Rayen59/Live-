@@ -20,6 +20,7 @@ interface SharedServerState {
   users: any[];
   streams: any[];
   recordings: any[];
+  media: any[];
   chat: { [streamId: string]: any[] };
   mics: { [streamId: string]: any[] };
   pairs: { [code: string]: any };
@@ -29,6 +30,7 @@ const sharedState: SharedServerState = {
   users: [],
   streams: [],
   recordings: [],
+  media: [],
   chat: {},
   mics: {},
   pairs: {},
@@ -216,15 +218,19 @@ async function bootstrap() {
           handleLeave(ws, streamId, userId);
         } else if (type === 'stream_update') {
           const { data } = msg;
-          const streamIdx = sharedState.streams.findIndex((s) => s.id === streamId);
+          let streamIdx = sharedState.streams.findIndex((s) => s.id === streamId);
           if (streamIdx !== -1) {
             sharedState.streams[streamIdx] = { ...sharedState.streams[streamIdx], ...data };
+          } else {
+            sharedState.streams.unshift({ id: streamId, ...data });
+            streamIdx = 0;
           }
+          const updatedStream = sharedState.streams[streamIdx];
           const room = rooms.get(streamId);
           if (room) {
             broadcastToRoom(room, { type: 'stream_update', streamId, data });
           }
-          broadcastSSE('stream_updated', { stream: sharedState.streams[streamIdx], streams: sharedState.streams });
+          broadcastSSE('stream_updated', { stream: updatedStream, streams: sharedState.streams });
         } else if (type === 'chat_message') {
           const { message } = msg;
           if (!sharedState.chat[streamId]) sharedState.chat[streamId] = [];
@@ -565,6 +571,24 @@ async function bootstrap() {
     sharedState.recordings = sharedState.recordings.filter((r) => r.id !== id);
     broadcastSSE('recordings_updated', sharedState.recordings);
     res.json({ success: true });
+  });
+
+  // Media / Ads gallery sync across devices
+  app.get('/api/sync/media', (_req, res) => {
+    res.json(sharedState.media || []);
+  });
+
+  app.post('/api/sync/media', (req, res) => {
+    const asset = req.body;
+    if (!asset || !asset.id) return res.status(400).json({ error: 'Média invalide' });
+    const idx = sharedState.media.findIndex((m) => m.id === asset.id);
+    if (idx !== -1) {
+      sharedState.media[idx] = { ...sharedState.media[idx], ...asset };
+    } else {
+      sharedState.media.unshift(asset);
+    }
+    broadcastSSE('media_updated', sharedState.media);
+    res.json({ success: true, asset });
   });
 
   // Reset shared state

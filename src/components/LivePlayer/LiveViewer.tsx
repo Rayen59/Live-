@@ -120,6 +120,16 @@ export const LiveViewer: React.FC<LiveViewerProps> = ({
       }
     });
 
+    const unsubSSE = StorageService.subscribeToSyncEvents((event) => {
+      if (event.type === 'stream_updated') {
+        const streamData = event.data?.stream;
+        if (streamData && streamData.id === stream.id) {
+          setCurrentStreamState((prev) => ({ ...prev, ...streamData }));
+          if (streamData.aspectRatio) setPlayerFormat(streamData.aspectRatio);
+        }
+      }
+    });
+
     // 4. Real-time Video Frame Snapshots (Zero latency visual feed fallback)
     const unsubFrame = realtime.on('video_frame', ({ frame }) => {
       if (frame) {
@@ -251,6 +261,7 @@ export const LiveViewer: React.FC<LiveViewerProps> = ({
       unsubInitial();
       unsubMics();
       unsubSignal();
+      unsubSSE();
       if (peerConnectionRef.current) {
         peerConnectionRef.current.close();
       }
@@ -334,7 +345,7 @@ export const LiveViewer: React.FC<LiveViewerProps> = ({
     }
   };
 
-  const handleSendMessage = (text: string, isSuperChat?: boolean, tipAmount?: number) => {
+  const handleSendMessage = (text: string) => {
     const newMsg: ChatMessage = {
       id: `msg_${Date.now()}`,
       streamId: stream.id,
@@ -344,8 +355,6 @@ export const LiveViewer: React.FC<LiveViewerProps> = ({
       role: currentUser.role,
       text,
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      isSuperChat,
-      tipAmount,
     };
     StorageService.saveChatMessage(newMsg);
     setMessages((prev) => [...prev, newMsg]);
@@ -365,11 +374,12 @@ export const LiveViewer: React.FC<LiveViewerProps> = ({
     filter: `brightness(${viewerFilters.brightness}%) contrast(${viewerFilters.contrast + clarityBonusContrast}%) saturate(${viewerFilters.saturation}%)`,
   };
 
-  // AD / MEDIA DETECTION
+  // AD / MEDIA DETECTION (Real-time synchronization for full screen and PiP ads)
   const isAdOrMediaSolo =
     currentStreamState.activeSource === 'media' || currentStreamState.activeSource === 'poster';
 
   const activeMediaUrl =
+    currentStreamState.currentMediaUrl ||
     currentStreamState.sponsorVideoUrl ||
     (currentStreamState.currentMediaId
       ? StorageService.getMediaAssets().find((m) => m.id === currentStreamState.currentMediaId)?.url
@@ -377,11 +387,20 @@ export const LiveViewer: React.FC<LiveViewerProps> = ({
 
   const isMediaVideo =
     currentStreamState.activeSource === 'media' ||
+    currentStreamState.currentMediaType === 'video' ||
     (activeMediaUrl && !activeMediaUrl.match(/\.(jpeg|jpg|gif|png|webp)($|\?)/i) && !activeMediaUrl.startsWith('data:image'));
 
-  const parallelMediaAsset = currentStreamState.parallelMediaId
-    ? StorageService.getMediaAssets().find((m) => m.id === currentStreamState.parallelMediaId)
-    : null;
+  const parallelMediaUrl =
+    currentStreamState.parallelMediaUrl ||
+    (currentStreamState.parallelMediaId
+      ? StorageService.getMediaAssets().find((m) => m.id === currentStreamState.parallelMediaId)?.url
+      : null);
+
+  const isParallelVideo =
+    currentStreamState.parallelMediaType === 'video' ||
+    (parallelMediaUrl && !parallelMediaUrl.match(/\.(jpeg|jpg|gif|png|webp)($|\?)/i) && !parallelMediaUrl.startsWith('data:image'));
+
+  const parallelMediaTitle = currentStreamState.parallelMediaName || 'Publicité sponsor';
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-4 space-y-4">
@@ -616,11 +635,11 @@ export const LiveViewer: React.FC<LiveViewerProps> = ({
             )}
 
             {/* PARALLEL PICTURE-IN-PICTURE AD (IF BROADCASTER LAUNCHED PIP AD) */}
-            {parallelMediaAsset && (
+            {parallelMediaUrl && (
               <div className="absolute bottom-12 right-4 z-30 w-44 sm:w-56 aspect-video bg-black rounded-xl overflow-hidden border-2 border-purple-500 shadow-2xl animate-in zoom-in-95">
-                {parallelMediaAsset.type === 'video' ? (
+                {isParallelVideo ? (
                   <video
-                    src={parallelMediaAsset.url}
+                    src={parallelMediaUrl}
                     autoPlay
                     loop
                     playsInline
@@ -629,8 +648,8 @@ export const LiveViewer: React.FC<LiveViewerProps> = ({
                   />
                 ) : (
                   <img
-                    src={parallelMediaAsset.url}
-                    alt={parallelMediaAsset.name}
+                    src={parallelMediaUrl}
+                    alt={parallelMediaTitle}
                     className="w-full h-full object-cover"
                   />
                 )}

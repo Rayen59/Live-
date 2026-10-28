@@ -136,16 +136,48 @@ export const VideoOutputCanvas: React.FC<VideoOutputCanvasProps> = ({
     return `${hrs > 0 ? `${hrs.toString().padStart(2, '0')}:` : ''}${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
-  // Start webcam or handle screen stream
-  useEffect(() => {
-    let currentStream: MediaStream | null = null;
+  const cameraStreamRef = useRef<MediaStream | null>(null);
+  const screenStreamRef = useRef<MediaStream | null>(null);
 
-    async function initMedia() {
+  // Clean up all hardware streams ONLY when studio unmounts
+  useEffect(() => {
+    return () => {
+      if (cameraStreamRef.current) {
+        cameraStreamRef.current.getTracks().forEach((track) => track.stop());
+        cameraStreamRef.current = null;
+      }
+      if (screenStreamRef.current) {
+        screenStreamRef.current.getTracks().forEach((track) => track.stop());
+        screenStreamRef.current = null;
+      }
+    };
+  }, []);
+
+  // Handle activeSource transitions without destroying live hardware camera stream
+  useEffect(() => {
+    let isCancelled = false;
+
+    async function setupSource() {
       if (activeSource === 'camera') {
+        setCameraError(null);
+        // If we already have an active camera stream with live tracks, instantly re-use it
+        const hasLiveCam =
+          cameraStreamRef.current &&
+          cameraStreamRef.current.getVideoTracks().some((t) => t.readyState === 'live');
+
+        if (hasLiveCam && cameraStreamRef.current) {
+          if (isCancelled) return;
+          setStreamObj(cameraStreamRef.current);
+          if (videoRef.current) {
+            videoRef.current.srcObject = cameraStreamRef.current;
+            videoRef.current.play().catch(() => {});
+          }
+          return;
+        }
+
+        // Otherwise request camera
         try {
-          setCameraError(null);
           const isPortrait = canvasFormat === '9:16';
-          // Request camera & mic with facingMode (Front/Back)
           const stream = await navigator.mediaDevices.getUserMedia({
             video: {
               width: { ideal: isPortrait ? 1080 : filterSettings.resolution === '1080p' ? 1920 : 1280 },
@@ -154,15 +186,27 @@ export const VideoOutputCanvas: React.FC<VideoOutputCanvasProps> = ({
             },
             audio: true,
           });
-          currentStream = stream;
+
+          if (isCancelled) {
+            stream.getTracks().forEach((t) => t.stop());
+            return;
+          }
+
+          cameraStreamRef.current = stream;
           setStreamObj(stream);
           if (videoRef.current) {
             videoRef.current.srcObject = stream;
             videoRef.current.play().catch(() => {});
           }
         } catch (err: any) {
-          console.warn('Accès caméra non disponible, utilisation du flux de test dynamique:', err);
-          setCameraError('Accès caméra non autorisé ou non disponible sur cette machine. Affichage du studio virtuel haute définition.');
+          console.warn('Accès caméra non disponible, basculement sur le studio virtuel:', err);
+          if (isCancelled) return;
+          setStreamObj(null);
+          setCameraError('Accès caméra non autorisé ou non disponible. Studio virtuel haute définition actif.');
+          if (videoRef.current) {
+            videoRef.current.srcObject = null;
+            videoRef.current.play().catch(() => {});
+          }
         }
       } else if (activeSource === 'screen') {
         try {
@@ -171,27 +215,46 @@ export const VideoOutputCanvas: React.FC<VideoOutputCanvasProps> = ({
             video: true,
             audio: true,
           });
-          currentStream = screenStream;
+
+          if (isCancelled) {
+            screenStream.getTracks().forEach((t) => t.stop());
+            return;
+          }
+
+          screenStreamRef.current = screenStream;
           setStreamObj(screenStream);
           if (videoRef.current) {
             videoRef.current.srcObject = screenStream;
             videoRef.current.play().catch(() => {});
           }
+
+          // Automatically return to camera when user clicks browser native "Stop sharing"
+          const videoTrack = screenStream.getVideoTracks()[0];
+          if (videoTrack) {
+            videoTrack.onended = () => {
+              if (onReturnToLiveCamera) onReturnToLiveCamera();
+            };
+          }
         } catch (err: any) {
           console.warn('Partage d’écran annulé:', err);
+          if (isCancelled) return;
           setCameraError('Partage d’écran interrompu ou annulé.');
+          if (onReturnToLiveCamera) onReturnToLiveCamera();
+        }
+      } else if (activeSource === 'media') {
+        // Solo Media / Ad mode:
+        // Keep camera stream intact in background!
+        if (mediaAssetVideoRef.current) {
+          mediaAssetVideoRef.current.currentTime = 0;
+          mediaAssetVideoRef.current.play().catch(() => {});
         }
       }
     }
 
-    if (activeSource === 'camera' || activeSource === 'screen') {
-      initMedia();
-    }
+    setupSource();
 
     return () => {
-      if (currentStream) {
-        currentStream.getTracks().forEach((track) => track.stop());
-      }
+      isCancelled = true;
     };
   }, [activeSource, filterSettings.resolution, facingMode, canvasFormat]);
 
@@ -199,37 +262,57 @@ export const VideoOutputCanvas: React.FC<VideoOutputCanvasProps> = ({
   const peerConnectionsRef = useRef<Map<string, RTCPeerConnection>>(new Map());
   const broadcastCanvasRef = useRef<HTMLCanvasElement | null>(null);
 
-  // Periodically send video frame snapshots over WebSocket (5 fps) for instant visual sync
+  // Periodically send video frame snapshots over WebSocket (4-5 fps) for instant visual sync
   useEffect(() => {
     if (!streamId) return;
 
     const frameInterval = setInterval(() => {
       try {
-        const activeVideoEl =
-          activeSource === 'media'
-            ? mediaAssetVideoRef.current
-            : videoRef.current;
-
-        if (!activeVideoEl || activeVideoEl.readyState < 2) return;
-
         if (!broadcastCanvasRef.current) {
           broadcastCanvasRef.current = document.createElement('canvas');
-          broadcastCanvasRef.current.width = 480;
-          broadcastCanvasRef.current.height = canvasFormat === '9:16' ? 854 : 270;
         }
 
         const cvs = broadcastCanvasRef.current;
+        cvs.width = 480;
+        cvs.height = canvasFormat === '9:16' ? 854 : 270;
         const ctx = cvs.getContext('2d');
-        if (ctx) {
-          ctx.drawImage(activeVideoEl, 0, 0, cvs.width, cvs.height);
-          const dataUrl = cvs.toDataURL('image/jpeg', 0.5);
-          realtime.sendVideoFrame(streamId, dataUrl);
+        if (!ctx) return;
+
+        if (activeSource === 'media') {
+          const el = mediaAssetVideoRef.current;
+          if (el && el.readyState >= 2) {
+            ctx.drawImage(el, 0, 0, cvs.width, cvs.height);
+            try {
+              const dataUrl = cvs.toDataURL('image/jpeg', 0.5);
+              realtime.sendVideoFrame(streamId, dataUrl);
+            } catch {}
+          }
+        } else if (activeSource === 'poster' && activeMedia?.url) {
+          const img = new Image();
+          img.crossOrigin = 'anonymous';
+          img.onload = () => {
+            try {
+              ctx.drawImage(img, 0, 0, cvs.width, cvs.height);
+              const dataUrl = cvs.toDataURL('image/jpeg', 0.5);
+              realtime.sendVideoFrame(streamId, dataUrl);
+            } catch {}
+          };
+          img.src = activeMedia.url;
+        } else {
+          const el = videoRef.current;
+          if (el && el.readyState >= 2) {
+            ctx.drawImage(el, 0, 0, cvs.width, cvs.height);
+            try {
+              const dataUrl = cvs.toDataURL('image/jpeg', 0.5);
+              realtime.sendVideoFrame(streamId, dataUrl);
+            } catch {}
+          }
         }
       } catch {}
-    }, 200);
+    }, 220);
 
     return () => clearInterval(frameInterval);
-  }, [streamId, activeSource, canvasFormat]);
+  }, [streamId, activeSource, canvasFormat, activeMedia?.url]);
 
   // WebRTC Broadcaster to send full HD video and microphone audio stream to viewers
   useEffect(() => {
@@ -546,6 +629,7 @@ export const VideoOutputCanvas: React.FC<VideoOutputCanvasProps> = ({
               autoPlay
               playsInline
               controls
+              crossOrigin="anonymous"
               onEnded={() => {
                 if (onReturnToLiveCamera) onReturnToLiveCamera();
               }}
