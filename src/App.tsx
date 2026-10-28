@@ -13,7 +13,7 @@ import { SearchPage } from './components/Search/SearchPage';
 import { VideoEditorModal } from './components/Recording/VideoEditorModal';
 import { StorageService } from './services/storage';
 import { User, LiveStream, RecordedVideo } from './types';
-import { CheckCircle2 } from 'lucide-react';
+import { CheckCircle2, MessageCircle } from 'lucide-react';
 
 export default function App() {
   // Global States: Starts completely blank / virgin (null user)
@@ -219,11 +219,11 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col font-sans selection:bg-rose-500 selection:text-white">
+    <div className="min-h-screen bg-[#071326] text-slate-100 flex flex-col font-sans selection:bg-sky-500 selection:text-white">
       {/* Toast Notification */}
       {notificationToast && (
-        <div className="fixed bottom-5 right-5 z-50 bg-zinc-900 border border-zinc-700/80 shadow-2xl p-3.5 rounded-2xl flex items-center gap-2.5 text-xs text-white animate-in slide-in-from-bottom duration-300">
-          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+        <div className="fixed bottom-5 right-5 z-50 bg-[#0b1c38] border border-[#163668] shadow-2xl p-3.5 rounded-2xl flex items-center gap-2.5 text-xs text-white animate-in slide-in-from-bottom duration-300">
+          <CheckCircle2 className="w-4 h-4 text-[#38bdf8] shrink-0" />
           <span>{notificationToast}</span>
         </div>
       )}
@@ -386,6 +386,18 @@ export default function App() {
         onSaveToProfile={handleSaveEditedRecording}
         onDownloadToDevice={handleDownloadVideo}
       />
+
+      {/* Floating Action Button (Matches Screenshot 1 & 2 bottom-right) */}
+      <button
+        onClick={() => {
+          showToast('Centre d’assistance & chat en direct disponible');
+        }}
+        className="fixed bottom-6 right-6 z-40 w-14 h-14 rounded-full bg-gradient-to-tr from-[#0284c7] to-[#38bdf8] shadow-2xl shadow-sky-950/70 border-2 border-white/20 flex items-center justify-center text-white cursor-pointer hover:scale-105 active:scale-95 transition-all"
+        title="Assistance & Chat en direct"
+        aria-label="Assistance & Chat"
+      >
+        <MessageCircle className="w-7 h-7 fill-white text-[#0284c7]" />
+      </button>
     </div>
   );
 };

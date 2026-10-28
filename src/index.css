@@ -10,20 +10,20 @@
   }
 }
 
-/* Custom dark scrollbar */
+/* Custom dark navy scrollbar */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
 ::-webkit-scrollbar-track {
-  background: rgba(24, 24, 27, 0.6);
+  background: rgba(7, 19, 38, 0.8);
 }
 ::-webkit-scrollbar-thumb {
-  background: rgba(82, 82, 91, 0.5);
+  background: rgba(30, 64, 115, 0.6);
   border-radius: 9999px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(113, 113, 122, 0.8);
+  background: rgba(56, 189, 248, 0.7);
 }
 
 /* Live pulse animation */

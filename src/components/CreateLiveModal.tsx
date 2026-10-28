@@ -105,23 +105,23 @@ export const CreateLiveModal: React.FC<CreateLiveModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/85 backdrop-blur-md animate-in fade-in duration-200 overflow-y-auto">
-      <div className="relative w-full max-w-lg bg-zinc-900 border border-zinc-800 rounded-3xl shadow-2xl p-5 sm:p-6 text-zinc-100 my-auto">
+      <div className="relative w-full max-w-lg bg-[#0b1c38] border border-[#163668] rounded-3xl shadow-2xl p-5 sm:p-6 text-slate-100 my-auto">
         <button
           onClick={onClose}
-          className="absolute top-4 right-4 text-zinc-400 hover:text-white p-1 rounded-lg hover:bg-zinc-800 transition cursor-pointer"
+          className="absolute top-4 right-4 text-slate-400 hover:text-white p-1 rounded-lg hover:bg-[#163668] transition cursor-pointer"
         >
           <X className="w-5 h-5" />
         </button>
 
         {/* Header */}
         <div className="text-center mb-5">
-          <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-rose-500/15 border border-rose-500/30 text-rose-400 mb-2.5 shadow-inner">
+          <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-sky-500/15 border border-[#163668] text-[#38bdf8] mb-2.5 shadow-inner">
             <Radio className="w-6 h-6 animate-pulse" />
           </div>
           <h2 className="text-xl font-bold text-white tracking-tight">
             Lancer un Live {aspectRatio === '9:16' ? 'Mobile' : 'Studio'}
           </h2>
-          <p className="text-xs text-zinc-400 mt-1">
+          <p className="text-xs text-slate-400 mt-1">
             Compatible téléphone portable (caméra avant/arrière) et ordinateur.
           </p>
         </div>
@@ -129,7 +129,7 @@ export const CreateLiveModal: React.FC<CreateLiveModalProps> = ({
         <form onSubmit={handleSubmit} className="space-y-4 text-xs">
           {/* Format selection: Mobile Vertical vs Desktop 16:9 */}
           <div>
-            <label className="block font-medium text-zinc-300 mb-1.5">
+            <label className="block font-medium text-slate-300 mb-1.5">
               Format de diffusion
             </label>
             <div className="grid grid-cols-2 gap-2">
@@ -138,16 +138,16 @@ export const CreateLiveModal: React.FC<CreateLiveModalProps> = ({
                 onClick={() => setAspectRatio('9:16')}
                 className={`p-2.5 rounded-xl border text-left transition flex items-center gap-2.5 cursor-pointer ${
                   aspectRatio === '9:16'
-                    ? 'bg-rose-500/20 border-rose-500 text-white font-bold'
-                    : 'bg-zinc-950 border-zinc-800 text-zinc-400 hover:text-zinc-200'
+                    ? 'bg-sky-500/20 border-[#38bdf8] text-white font-bold'
+                    : 'bg-[#07152b] border-[#163668] text-slate-400 hover:text-slate-200'
                 }`}
               >
-                <div className="p-1.5 rounded-lg bg-rose-500/20 text-rose-400">
+                <div className="p-1.5 rounded-lg bg-sky-500/20 text-[#38bdf8]">
                   <Smartphone className="w-4 h-4" />
                 </div>
                 <div>
                   <p className="text-xs font-semibold text-white">📱 Format Téléphone (9:16)</p>
-                  <p className="text-[10px] text-zinc-400">Vertical TikTok/Insta Live</p>
+                  <p className="text-[10px] text-slate-400">Vertical TikTok/Insta Live</p>
                 </div>
               </button>
 
@@ -156,16 +156,16 @@ export const CreateLiveModal: React.FC<CreateLiveModalProps> = ({
                 onClick={() => setAspectRatio('16:9')}
                 className={`p-2.5 rounded-xl border text-left transition flex items-center gap-2.5 cursor-pointer ${
                   aspectRatio === '16:9'
-                    ? 'bg-rose-500/20 border-rose-500 text-white font-bold'
-                    : 'bg-zinc-950 border-zinc-800 text-zinc-400 hover:text-zinc-200'
+                    ? 'bg-sky-500/20 border-[#38bdf8] text-white font-bold'
+                    : 'bg-[#07152b] border-[#163668] text-slate-400 hover:text-slate-200'
                 }`}
               >
-                <div className="p-1.5 rounded-lg bg-zinc-800 text-zinc-300">
+                <div className="p-1.5 rounded-lg bg-[#163668] text-slate-300">
                   <Monitor className="w-4 h-4" />
                 </div>
                 <div>
                   <p className="text-xs font-semibold text-white">💻 Format Paysage (16:9)</p>
-                  <p className="text-[10px] text-zinc-400">Standard PC & Régie</p>
+                  <p className="text-[10px] text-slate-400">Standard PC & Régie</p>
                 </div>
               </button>
             </div>
@@ -173,7 +173,7 @@ export const CreateLiveModal: React.FC<CreateLiveModalProps> = ({
 
           {/* Title */}
           <div>
-            <label className="block font-medium text-zinc-300 mb-1">
+            <label className="block font-medium text-slate-300 mb-1">
               Titre de la diffusion *
             </label>
             <input
@@ -182,19 +182,19 @@ export const CreateLiveModal: React.FC<CreateLiveModalProps> = ({
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="Ex: Direct depuis mon smartphone, échange live..."
-              className="w-full bg-zinc-950 border border-zinc-800 focus:border-rose-500 rounded-xl px-3.5 py-2.5 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:ring-1 focus:ring-rose-500"
+              className="w-full bg-[#07152b] border border-[#163668] focus:border-[#38bdf8] rounded-xl px-3.5 py-2.5 text-sm text-white placeholder:text-slate-600 focus:outline-none"
             />
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block font-medium text-zinc-300 mb-1">
+              <label className="block font-medium text-slate-300 mb-1">
                 Catégorie
               </label>
               <select
                 value={category}
                 onChange={(e) => setCategory(e.target.value as StreamCategory)}
-                className="w-full bg-zinc-950 border border-zinc-800 focus:border-rose-500 rounded-xl px-3 py-2 text-white focus:outline-none"
+                className="w-full bg-[#07152b] border border-[#163668] focus:border-[#38bdf8] rounded-xl px-3 py-2 text-white focus:outline-none"
               >
                 {CATEGORIES.map((c) => (
                   <option key={c} value={c}>
@@ -205,7 +205,7 @@ export const CreateLiveModal: React.FC<CreateLiveModalProps> = ({
             </div>
 
             <div>
-              <label className="block font-medium text-zinc-300 mb-1">
+              <label className="block font-medium text-slate-300 mb-1">
                 Tags (séparés par des virgules)
               </label>
               <input
@@ -213,7 +213,7 @@ export const CreateLiveModal: React.FC<CreateLiveModalProps> = ({
                 value={tagsInput}
                 onChange={(e) => setTagsInput(e.target.value)}
                 placeholder="Mobile, Direct, Discussion"
-                className="w-full bg-zinc-950 border border-zinc-800 focus:border-rose-500 rounded-xl px-3 py-2 text-white placeholder:text-zinc-600 focus:outline-none"
+                className="w-full bg-[#07152b] border border-[#163668] focus:border-[#38bdf8] rounded-xl px-3 py-2 text-white placeholder:text-slate-600 focus:outline-none"
               />
             </div>
           </div>
@@ -411,7 +411,7 @@ export const CreateLiveModal: React.FC<CreateLiveModalProps> = ({
 
           <button
             type="submit"
-            className="w-full py-2.5 px-4 bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 text-white font-bold rounded-xl text-xs sm:text-sm transition shadow-md shadow-rose-950/40 cursor-pointer flex items-center justify-center gap-2 mt-2"
+            className="w-full py-2.5 px-4 bg-gradient-to-r from-[#0284c7] to-[#38bdf8] hover:from-[#0369a1] hover:to-[#0284c7] text-white font-bold rounded-xl text-xs sm:text-sm transition shadow-lg shadow-sky-950/40 cursor-pointer flex items-center justify-center gap-2 mt-2"
           >
             <Video className="w-4 h-4" />
             <span>Démarrer la diffusion en direct</span>
